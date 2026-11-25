@@ -1,0 +1,30 @@
+# .NET / Visual Studio / Rider build artifacts
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.cache
+*.log
+*.tmp
+
+# Published binaries & delivery packages (uploaded via GitHub Releases instead)
+dist/
+04-交付物/
+
+# Local working notes, screenshots & personal data backups (NEVER commit to GitHub)
+01-需求与方案/
+03-工作产物/
+05-项目日志/
+docs/screenshots/
+docs/sample-data.json
+data.json
+data.json.bak
+data.corrupt-*.json
+settings.json
+
+# OS / Editor junk
+Thumbs.db
+Desktop.ini
+.DS_Store

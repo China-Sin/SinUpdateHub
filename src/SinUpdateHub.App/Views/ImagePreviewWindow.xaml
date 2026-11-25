@@ -1,0 +1,89 @@
+<Window x:Class="SinUpdateHub.App.Views.ImagePreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        mc:Ignorable="d"
+        Title="图片预览"
+        Width="980"
+        Height="720"
+        MinWidth="600"
+        MinHeight="450"
+        ResizeMode="CanResize"
+        WindowStyle="None"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource BrushBg0}"
+        Style="{StaticResource WindowBaseStyle}">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            CornerRadius="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Border BorderBrush="{StaticResource BrushBorderStrong}" BorderThickness="1" Background="{StaticResource BrushBg0}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="44" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- 标题与操作栏 -->
+            <Grid Grid.Row="0" Background="{StaticResource BrushBg1}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <TextBlock x:Name="CaptionTextBlock"
+                           Text="图片预览"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource BrushText}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center"
+                           Margin="16,0,260,0" />
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,8,0">
+                    <Button x:Name="ZoomModeButton"
+                            Style="{StaticResource GhostButton}"
+                            MinHeight="28"
+                            Height="28"
+                            Padding="10,0"
+                            Content="查看 100% 原图"
+                            Click="ToggleZoomMode_Click" />
+                    <Button Style="{StaticResource SecondaryButton}"
+                            MinHeight="28"
+                            Height="28"
+                            Padding="10,0"
+                            Margin="6,0,8,0"
+                            Content="复制图片"
+                            Click="CopyImage_Click" />
+                    <Button Style="{StaticResource CloseTitleBarButton}"
+                            Height="44"
+                            Content="&#xE711;"
+                            ToolTip="关闭"
+                            IsCancel="True"
+                            Click="Close_Click" />
+                </StackPanel>
+            </Grid>
+
+            <!-- 图片浏览区 -->
+            <ScrollViewer x:Name="PreviewScrollViewer"
+                          Grid.Row="1"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Disabled"
+                          Background="#090C10"
+                          Padding="16">
+                <Image x:Name="PreviewImageControl"
+                       Stretch="Uniform"
+                       StretchDirection="DownOnly"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</Window>

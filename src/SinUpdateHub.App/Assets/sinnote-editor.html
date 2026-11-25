@@ -1,0 +1,3091 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SinNote Markdown Editor</title>
+  <link rel="stylesheet" href="https://sinnote.local/vditor/dist/index.css" />
+  <style>
+    :root {
+      --bg-0: #0D1117;
+      --bg-1: #161B22;
+      --bg-2: #21262D;
+      --border: #30363D;
+      --accent: #A371F7;
+      --text-primary: #E6EDF3;
+      --text-secondary: #8B949E;
+      --tbl-header-bg: #2F75B5;
+      --tbl-header-fg: #FFFFFF;
+      --tbl-firstcol-bg: #2F75B5;
+      --tbl-firstcol-fg: #FFFFFF;
+      --tbl-cell-bg: #1E2D3D;
+      --tbl-cell-fg: #E6EDF3;
+      --editor-font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+      --editor-font-size: 15px;
+      --editor-line-height: 1.72;
+      --editor-zoom: 1;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-0);
+      color: var(--text-primary);
+      font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+
+    #vditor {
+      width: 100%;
+      height: 100vh;
+      border: none !important;
+      background-color: var(--bg-0) !important;
+    }
+
+    .vditor {
+      --panel-background-color: var(--bg-1);
+      --toolbar-background-color: var(--bg-1);
+      --toolbar-icon-color: #C9D1D9;
+      --toolbar-icon-hover-color: var(--accent);
+      --textarea-background-color: var(--bg-0);
+      --textarea-text-color: var(--text-primary);
+      --border-color: var(--border);
+      --second-color: #8B949E;
+      --hover-background-color: var(--bg-2);
+      --heading-border-color: var(--border);
+      --blockquote-color: #9DA7B3;
+      --ir-heading-color: #F0F6FC;
+      --ir-title-color: #D2A8FF;
+      --ir-bi-color: #79C0FF;
+      --ir-link-color: #79C0FF;
+      --ir-bracket-color: #6E7681;
+      --ir-paren-color: #6E7681;
+      border: none !important;
+      border-radius: 0 !important;
+    }
+
+    .vditor-toolbar {
+      display: flex !important;
+      align-items: center !important;
+      flex-wrap: wrap !important;
+      row-gap: 4px !important;
+      background-color: var(--bg-1) !important;
+      border-bottom: 1px solid var(--border) !important;
+      padding: 5px 14px !important;
+      position: relative !important;
+      z-index: 1000010 !important;
+      overflow: visible !important;
+    }
+
+    .vditor-toolbar__item {
+      float: none !important;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .vditor-toolbar__divider {
+      float: none !important;
+      height: 16px !important;
+      margin: 0 6px !important;
+    }
+
+    /* 顶部工具栏及编辑器内所有浮条的悬停提示一律向下弹出，彻底避免被顶部工具栏或视口顶边遮挡 */
+    .vditor-toolbar .vditor-tooltipped::after,
+    .vditor-panel .vditor-tooltipped::after {
+      top: 100% !important;
+      bottom: auto !important;
+      margin-top: 7px !important;
+      margin-bottom: 0 !important;
+      left: 50% !important;
+      right: auto !important;
+      transform: translateX(-50%) !important;
+      background-color: #2D333B !important;
+      color: #F0F6FC !important;
+      font-size: 12px !important;
+      padding: 5px 10px !important;
+      border-radius: 5px !important;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5) !important;
+      z-index: 1000040 !important;
+    }
+
+    .vditor-toolbar .vditor-tooltipped::before,
+    .vditor-panel .vditor-tooltipped::before {
+      top: 100% !important;
+      bottom: auto !important;
+      margin-top: -3px !important;
+      margin-bottom: 0 !important;
+      left: 50% !important;
+      right: auto !important;
+      margin-left: -5px !important;
+      margin-right: 0 !important;
+      border-top-color: transparent !important;
+      border-bottom-color: #2D333B !important;
+      z-index: 1000041 !important;
+    }
+
+    /* WYSIWYG 模式下隐藏 Vditor 自带的重复表格浮条（统一使用顶部停靠的全中文 #table-bar，不遮挡表头） */
+    .vditor-wysiwyg .vditor-panel:has(button[data-type="insertRowA"]),
+    .vditor-wysiwyg .vditor-panel:has(button[data-type="deleteRow"]),
+    .vditor-wysiwyg .vditor-panel:has(input[aria-label*="行"]) {
+      display: none !important;
+    }
+
+    .vditor-toolbar .vditor-tooltipped__ne::after,
+    .vditor-toolbar > .vditor-toolbar__item:first-child .vditor-tooltipped::after {
+      left: 0 !important;
+      right: auto !important;
+      margin-left: 0 !important;
+      transform: none !important;
+    }
+
+    .vditor-toolbar .vditor-tooltipped__nw::after {
+      left: auto !important;
+      right: 0 !important;
+      margin-right: 0 !important;
+      transform: none !important;
+    }
+
+    .vditor-toolbar .vditor-panel,
+    .vditor-toolbar .vditor-hint {
+      top: calc(100% + 4px) !important;
+      bottom: auto !important;
+      margin-top: 0 !important;
+      transform: none !important;
+      z-index: 1000025 !important;
+    }
+
+    .vditor-toolbar__item {
+      position: relative !important;
+    }
+
+    /* 整合到 Vditor 工具栏末尾的配色 / 字体紧凑按钮 */
+    .sinnote-tb-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 24px;
+      padding: 0 8px;
+      margin-right: 4px;
+      background: #21262D;
+      color: #E6EDF3;
+      border: 1px solid #30363D;
+      border-radius: 5px;
+      font-size: 11.5px;
+      font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background-color 0.12s, border-color 0.12s;
+    }
+
+    .sinnote-tb-btn:hover {
+      background: #2D333B;
+      border-color: var(--accent);
+      color: #FFFFFF;
+    }
+
+    .sinnote-tb-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .sinnote-tb-aa {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 11.5px;
+    }
+
+    .vditor-content {
+      background-color: var(--bg-0) !important;
+    }
+
+    .vditor-ir pre.vditor-reset,
+    .vditor-wysiwyg pre.vditor-reset,
+    .vditor-sv {
+      background-color: var(--bg-0) !important;
+      color: var(--text-primary) !important;
+      padding: 18px 26px 96px 26px !important;
+      font-size: var(--editor-font-size) !important;
+      line-height: var(--editor-line-height) !important;
+      font-family: var(--editor-font-family) !important;
+      zoom: var(--editor-zoom);
+    }
+
+    .vditor-reset pre code,
+    .vditor-reset code {
+      font-size: 0.92em !important;
+    }
+
+    .vditor-reset h1,
+    .vditor-reset h2,
+    .vditor-reset h3,
+    .vditor-reset h4 {
+      color: #F0F6FC;
+      border-bottom-color: var(--border);
+    }
+
+    .vditor-reset a {
+      color: #79C0FF;
+    }
+
+    .vditor-reset blockquote {
+      border-left-color: var(--accent);
+      color: #9DA7B3;
+      background: rgba(163, 113, 247, 0.06);
+      padding: 4px 12px;
+      border-radius: 0 4px 4px 0;
+    }
+
+    /* 图片：悬停正常指针；单击紫色高亮选中（按 Backspace/Delete 删除）；双击页内放大 */
+    .vditor-reset img {
+      max-width: 100%;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: box-shadow 0.12s, outline-color 0.12s;
+    }
+
+    .vditor-reset img.sinnote-img-selected {
+      outline: 2.5px solid var(--accent) !important;
+      outline-offset: 2px;
+      box-shadow: 0 0 0 5px rgba(163, 113, 247, 0.25) !important;
+    }
+
+    /* OneNote 风格表格配色（首行 / 首列 / 正文区分，可由工具栏实时调色） */
+    .vditor-reset table {
+      border-collapse: collapse;
+      width: auto;
+      min-width: 360px;
+      margin: 12px 0;
+      border-radius: 4px;
+    }
+
+    .vditor-reset table tr {
+      background-color: transparent !important;
+      border-top: none !important;
+    }
+
+    .vditor-reset table th,
+    .vditor-reset table td {
+      border: 1px solid #485464 !important;
+      padding: 7px 12px !important;
+      min-width: 78px;
+      min-height: 30px;
+      height: 30px;
+      vertical-align: middle;
+      word-break: break-word;
+    }
+
+    .vditor-reset table th:empty::before,
+    .vditor-reset table td:empty::before {
+      content: "\200B";
+    }
+
+    .vditor-reset table thead th,
+    .vditor-reset table thead tr {
+      background-color: var(--tbl-header-bg) !important;
+      color: var(--tbl-header-fg) !important;
+      font-weight: 600;
+    }
+
+    .vditor-reset table tbody tr td:first-child {
+      background-color: var(--tbl-firstcol-bg) !important;
+      color: var(--tbl-firstcol-fg) !important;
+      font-weight: 500;
+    }
+
+    .vditor-reset table tbody tr td:not(:first-child) {
+      background-color: var(--tbl-cell-bg) !important;
+      color: var(--tbl-cell-fg) !important;
+    }
+
+    /* Ctrl+A+A / Ctrl+A+A+A 选中单元格高亮反馈 */
+    .vditor-reset table th.sinnote-cell-selected,
+    .vditor-reset table td.sinnote-cell-selected {
+      box-shadow: inset 0 0 0 2px var(--accent) !important;
+      filter: brightness(1.18);
+    }
+
+    /* 选中文本高亮标记与自定义字色 / 局部字体渲染代理（不影响 Lute Markdown 序列化） */
+    .vditor-reset mark,
+    .vditor-reset .sinnote-styled-proxy[data-tag="mark"] {
+      padding: 0 2px;
+      border-radius: 3px;
+    }
+
+    .vditor-hint,
+    .vditor-panel {
+      background-color: var(--bg-1) !important;
+      border: 1px solid var(--border) !important;
+      color: var(--text-primary) !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+    }
+
+    /* 表格专属中文操作条（停靠在编辑器顶部工具栏正下方、正文区之上，绝不遮挡任何表格单元格） */
+    .sinnote-table-bar {
+      position: relative;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 5px;
+      padding: 5px 16px;
+      background-color: #131820;
+      border-bottom: 1px solid #30363D;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .sinnote-table-bar[hidden] {
+      display: none !important;
+    }
+
+    .sinnote-tbl-btn {
+      appearance: none;
+      background: #21262D;
+      color: #E6EDF3;
+      border: 1px solid #30363D;
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 11.5px;
+      font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+      cursor: pointer;
+      line-height: 1.4;
+      white-space: nowrap;
+      transition: background-color 0.12s, border-color 0.12s;
+    }
+
+    .sinnote-tbl-btn:hover:not(:disabled) {
+      background: #30363D;
+      border-color: var(--accent);
+      color: #FFFFFF;
+    }
+
+    .sinnote-tbl-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .sinnote-tbl-sep {
+      width: 1px;
+      height: 16px;
+      background: #30363D;
+      margin: 0 2px;
+    }
+
+    .sinnote-tbl-dim {
+      font-size: 11px;
+      color: #8B949E;
+      padding: 0 4px;
+      font-family: Consolas, monospace;
+      white-space: nowrap;
+    }
+
+    /* 工具栏配色 / 字体格式内联浮层 */
+    .sinnote-popover {
+      position: fixed;
+      z-index: 1000030;
+      width: 276px;
+      padding: 12px;
+      background: #161B22;
+      border: 1px solid #444C56;
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
+      color: #E6EDF3;
+      font-size: 12px;
+    }
+
+    .sinnote-popover[hidden] {
+      display: none !important;
+    }
+
+    .sinnote-pop-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #F0F6FC;
+      margin: 0 0 8px 0;
+    }
+
+    .sinnote-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .sinnote-swatch-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .sinnote-swatch-btn:hover {
+      border: 2px solid #FFFFFF;
+    }
+
+    .sinnote-pop-hint {
+      font-size: 11px;
+      color: #8B949E;
+      margin: 0 0 6px 0;
+      line-height: 1.45;
+    }
+
+    .sinnote-hex-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .sinnote-hex-input {
+      flex: 1;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 5px;
+      border: 1px solid #30363D;
+      background: #0D1117;
+      color: #E6EDF3;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      outline: none;
+    }
+
+    .sinnote-hex-input:focus {
+      border-color: var(--accent);
+    }
+
+    .sinnote-pop-btn {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 5px;
+      border: 1px solid #30363D;
+      background: #21262D;
+      color: #E6EDF3;
+      font-size: 11.5px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .sinnote-pop-btn:hover {
+      background: #30363D;
+      border-color: var(--accent);
+    }
+
+    .sinnote-pop-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #FFFFFF;
+      font-weight: 600;
+    }
+
+    .sinnote-pop-btn.primary:hover {
+      filter: brightness(1.08);
+    }
+
+    .sinnote-pop-btn.ghost {
+      background: transparent;
+      border-color: transparent;
+      color: var(--accent);
+      padding: 0 6px;
+      height: 24px;
+    }
+
+    .sinnote-pop-btn.ghost:hover {
+      background: rgba(163, 113, 247, 0.14);
+    }
+
+    .sinnote-font-search {
+      width: 100%;
+      height: 28px;
+      padding: 0 9px;
+      margin-bottom: 8px;
+      border-radius: 5px;
+      border: 1px solid #30363D;
+      background: #0D1117;
+      color: #E6EDF3;
+      font-size: 12px;
+      outline: none;
+    }
+
+    .sinnote-font-search:focus {
+      border-color: var(--accent);
+    }
+
+    .sinnote-font-list {
+      max-height: 260px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-bottom: 10px;
+      padding-right: 2px;
+    }
+
+    .sinnote-font-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      min-height: 28px;
+      padding: 4px 9px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: #E6EDF3;
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .sinnote-font-item:hover {
+      background: #21262D;
+      border-color: #30363D;
+    }
+
+    .sinnote-font-item.is-active {
+      border-color: var(--accent);
+      background: rgba(163, 113, 247, 0.18);
+      color: #FFFFFF;
+    }
+
+    .sinnote-font-count {
+      font-size: 11px;
+      color: #8B949E;
+      font-weight: 400;
+    }
+
+    /* 选中文本悬浮迷你格式栏（文本高亮 + 字体颜色，参考 OneNote） */
+    .sinnote-sel-bar {
+      position: fixed;
+      z-index: 1000040;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 4px 6px;
+      background: #161B22;
+      border: 1px solid #444C56;
+      border-radius: 8px;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.6);
+      user-select: none;
+    }
+
+    .sinnote-sel-bar[hidden] {
+      display: none !important;
+    }
+
+    .sinnote-sel-split {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 5px;
+      border: 1px solid #30363D;
+      background: #21262D;
+      overflow: hidden;
+    }
+
+    .sinnote-sel-main,
+    .sinnote-sel-arrow,
+    .sinnote-sel-iconbtn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: #E6EDF3;
+      cursor: pointer;
+      height: 26px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 7px;
+      font-size: 12px;
+      font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    }
+
+    .sinnote-sel-arrow {
+      padding: 0 4px;
+      font-size: 9px;
+      color: #8B949E;
+      border-left: 1px solid #30363D;
+    }
+
+    .sinnote-sel-iconbtn {
+      border: 1px solid #30363D;
+      background: #21262D;
+      border-radius: 5px;
+      padding: 0 8px;
+      font-size: 11.5px;
+    }
+
+    .sinnote-sel-main:hover,
+    .sinnote-sel-arrow:hover,
+    .sinnote-sel-iconbtn:hover {
+      background: #30363D;
+      color: #FFFFFF;
+    }
+
+    .sinnote-sel-indicator {
+      width: 14px;
+      height: 3px;
+      border-radius: 1.5px;
+      margin-top: 1px;
+    }
+
+    .sinnote-sel-palette {
+      position: fixed;
+      z-index: 1000050;
+      padding: 8px 10px;
+      background: #161B22;
+      border: 1px solid #444C56;
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65);
+      user-select: none;
+    }
+
+    .sinnote-sel-palette[hidden] {
+      display: none !important;
+    }
+
+    .sinnote-sel-palette-grid {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      max-width: 220px;
+      margin-bottom: 6px;
+    }
+
+    .sinnote-sel-clear {
+      width: 100%;
+      height: 24px;
+      border-radius: 4px;
+      border: 1px solid #30363D;
+      background: #21262D;
+      color: #C9D1D9;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .sinnote-sel-clear:hover {
+      border-color: var(--accent);
+      color: #FFFFFF;
+    }
+
+    .sinnote-pop-footer {
+      border-top: 1px solid #30363D;
+      padding-top: 8px;
+      margin-top: 2px;
+    }
+
+    /* 画布缩放右下角轻提示（Ctrl+滚轮缩放时瞬时显示） */
+    .sinnote-zoom-hud {
+      position: fixed;
+      right: 18px;
+      bottom: 16px;
+      z-index: 999995;
+      background: rgba(22, 27, 34, 0.92);
+      border: 1px solid #444C56;
+      color: #E6EDF3;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-family: Consolas, "Microsoft YaHei UI", monospace;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.16s ease;
+    }
+
+    .sinnote-zoom-hud.is-visible {
+      opacity: 1;
+    }
+
+    /* CSS Highlight API 查找命中高亮（零 DOM 侵入，不污染 Markdown） */
+    ::highlight(sinnote-find-all) {
+      background-color: rgba(163, 113, 247, 0.38);
+      color: #FFFFFF;
+    }
+
+    ::highlight(sinnote-find-active) {
+      background-color: #D29922;
+      color: #0D1117;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #30363D;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #484F58;
+    }
+  </style>
+</head>
+<body>
+  <div id="vditor"></div>
+
+  <!-- 表格专属悬浮操作条（光标进入任意单元格时显示在表格正上方，不含删表格以免误删） -->
+  <div id="table-bar" class="sinnote-table-bar" hidden>
+    <button type="button" class="sinnote-tbl-btn" data-act="rowAbove" title="在当前行上方插入一行">+ 上插行</button>
+    <button type="button" class="sinnote-tbl-btn" data-act="rowBelow" title="在当前行下方插入一行">+ 下插行</button>
+    <button type="button" class="sinnote-tbl-btn" data-act="delRow" title="删除当前行">- 删行</button>
+    <span class="sinnote-tbl-sep"></span>
+    <button type="button" class="sinnote-tbl-btn" data-act="colLeft" title="在当前列左侧插入一列">+ 左插列</button>
+    <button type="button" class="sinnote-tbl-btn" data-act="colRight" title="在当前列右侧插入一列">+ 右插列</button>
+    <button type="button" class="sinnote-tbl-btn" data-act="delCol" title="删除当前列">- 删列</button>
+    <span class="sinnote-tbl-sep"></span>
+    <button type="button" class="sinnote-tbl-btn" data-act="moveUp" title="将当前数据行上移一行">↑ 上移</button>
+    <button type="button" class="sinnote-tbl-btn" data-act="moveDown" title="将当前数据行下移一行">↓ 下移</button>
+    <span class="sinnote-tbl-sep"></span>
+    <span id="table-dim" class="sinnote-tbl-dim">3 × 3</span>
+  </div>
+
+  <!-- 表格颜色弹出浮层 -->
+  <div id="color-popover" class="sinnote-popover" hidden>
+    <div id="color-pop-title" class="sinnote-pop-title">选择表格颜色</div>
+    <div id="color-pop-swatches" class="sinnote-swatches"></div>
+    <div class="sinnote-pop-hint">自定义十六进制（如 #2F75B5 或 #BDD7EE）</div>
+    <div class="sinnote-hex-row">
+      <input id="color-hex-input" type="text" class="sinnote-hex-input" maxlength="9" placeholder="#2F75B5" />
+      <button id="color-hex-apply" type="button" class="sinnote-pop-btn primary">应用</button>
+    </div>
+    <button id="color-reset-btn" type="button" class="sinnote-pop-btn ghost">恢复默认配色（OneNote 蓝）</button>
+  </div>
+
+  <!-- 字体格式与画布缩放弹出浮层（动态加载 Windows 系统字体库；有选区时仅改选中文字） -->
+  <div id="font-popover" class="sinnote-popover" hidden style="width: 316px;">
+    <div class="sinnote-pop-title" style="display:flex;justify-content:space-between;align-items:center;">
+      <span id="font-pop-title">正文字体格式（系统字体库）</span>
+      <span id="font-pop-count" class="sinnote-font-count"></span>
+    </div>
+    <input id="font-search-input" type="text" class="sinnote-font-search" placeholder="搜索系统字体（如 微软雅黑 / 思源 / Consolas）…" />
+    <div id="font-pop-list" class="sinnote-font-list"></div>
+    <div class="sinnote-pop-footer">
+      <div id="font-zoom-summary" class="sinnote-pop-hint">当前缩放：100%（正文区按 Ctrl+滚轮 缩放，Ctrl+0 还原）</div>
+      <div style="display: flex; gap: 6px;">
+        <button id="zoom-reset-btn" type="button" class="sinnote-pop-btn">还原 100%</button>
+        <button id="font-reset-btn" type="button" class="sinnote-pop-btn ghost">恢复默认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 选中文本浮动格式工具条（文本高亮 + 字体颜色 + 对齐） -->
+  <div id="selection-bar" class="sinnote-sel-bar" hidden>
+    <div class="sinnote-sel-split">
+      <button id="sel-hl-apply" type="button" class="sinnote-sel-main" title="文本突出显示颜色 (Ctrl+Alt+H)">
+        <span style="font-weight:700;line-height:1.05;">ab</span>
+        <span id="sel-hl-bar" class="sinnote-sel-indicator" style="background:#FFF100;"></span>
+      </button>
+      <button id="sel-hl-menu" type="button" class="sinnote-sel-arrow" title="选择高亮颜色">▾</button>
+    </div>
+
+    <div class="sinnote-sel-split">
+      <button id="sel-fg-apply" type="button" class="sinnote-sel-main" title="应用字体颜色">
+        <span style="font-weight:700;line-height:1.05;">A</span>
+        <span id="sel-fg-bar" class="sinnote-sel-indicator" style="background:#FF6B6B;"></span>
+      </button>
+      <button id="sel-fg-menu" type="button" class="sinnote-sel-arrow" title="选择字体颜色">▾</button>
+    </div>
+
+    <span class="sinnote-tbl-sep"></span>
+    <button type="button" class="sinnote-sel-iconbtn" data-align="left" title="左对齐" style="padding:0 6px;">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v1.6H2V3zm0 4h8v1.6H2V7zm0 4h11v1.6H2V11z"/></svg>
+    </button>
+    <button type="button" class="sinnote-sel-iconbtn" data-align="center" title="居中对齐" style="padding:0 6px;">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v1.6H2V3zm2 4h8v1.6H4V7zm-1 4h10v1.6H3V11z"/></svg>
+    </button>
+    <button type="button" class="sinnote-sel-iconbtn" data-align="right" title="右对齐" style="padding:0 6px;">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v1.6H2V3zm4 4h8v1.6H6V7zm-3 4h11v1.6H3V11z"/></svg>
+    </button>
+  </div>
+
+  <!-- 选区高亮/字体颜色调色板 -->
+  <div id="selection-palette" class="sinnote-sel-palette" hidden>
+    <div id="sel-palette-title" class="sinnote-pop-title" style="font-size:11.5px;margin-bottom:6px;">选择颜色</div>
+    <div id="sel-palette-grid" class="sinnote-sel-palette-grid"></div>
+    <button id="sel-palette-clear" type="button" class="sinnote-sel-clear">无颜色 / 清除</button>
+  </div>
+
+  <div id="zoom-hud" class="sinnote-zoom-hud">100%</div>
+
+  <!-- 预加载本地离线 highlight.js，确保代码块语言提示立即包含 C++/Python/Java/C#/Go/Rust 等 190+ 种编程语言 -->
+  <script src="https://sinnote.local/vditor/dist/js/highlight.js/highlight.min.js"></script>
+  <script src="https://sinnote.local/vditor/dist/js/highlight.js/third-languages.js"></script>
+  <script src="https://sinnote.local/vditor/dist/index.min.js"></script>
+  <script>
+    (function () {
+      const DEFAULT_HEADER_BG = '#2F75B5';
+      const DEFAULT_FIRSTCOL_BG = '#2F75B5';
+      const DEFAULT_CELL_BG = '#1E2D3D';
+      const DEFAULT_FONT_FAMILY = "'Microsoft YaHei UI', 'Segoe UI', system-ui, sans-serif";
+
+      const HEADER_COLOR_PRESETS = [
+        { name: 'OneNote 蓝', hex: '#2F75B5' },
+        { name: '深海蓝', hex: '#1F4E78' },
+        { name: '暮紫', hex: '#5B3E96' },
+        { name: '青绿', hex: '#1F7A7A' },
+        { name: '森林绿', hex: '#2E7D32' },
+        { name: '琥珀橙', hex: '#B26A00' },
+        { name: '砖红', hex: '#A52A2A' },
+        { name: '石板灰', hex: '#334155' }
+      ];
+
+      const CELL_COLOR_PRESETS = [
+        { name: '深蓝灰', hex: '#1E2D3D' },
+        { name: 'OneNote 浅蓝', hex: '#BDD7EE' },
+        { name: '深炭灰', hex: '#1C2128' },
+        { name: '深紫灰', hex: '#261E38' },
+        { name: '深绿灰', hex: '#1D3126' },
+        { name: '深棕灰', hex: '#2D2618' },
+        { name: '浅灰白', hex: '#E2E8F0' },
+        { name: '浅米黄', hex: '#FFF2CC' }
+      ];
+
+      const HIGHLIGHT_COLOR_PRESETS = [
+        { name: '荧光黄（OneNote）', bg: '#FFF100', fg: '#111827' },
+        { name: '荧光绿', bg: '#7CFC00', fg: '#111827' },
+        { name: '天青蓝', bg: '#58D1FF', fg: '#111827' },
+        { name: '亮玫粉', bg: '#FF7AD9', fg: '#111827' },
+        { name: '柔和紫', bg: '#C49BFF', fg: '#111827' },
+        { name: '暖琥珀', bg: '#FFB74D', fg: '#111827' },
+        { name: '深红强调', bg: '#D93025', fg: '#FFFFFF' },
+        { name: '深蓝强调', bg: '#1A73E8', fg: '#FFFFFF' }
+      ];
+
+      const TEXT_COLOR_PRESETS = [
+        { name: '亮红', hex: '#FF6B6B' },
+        { name: '暖橙', hex: '#FFA94D' },
+        { name: '明黄', hex: '#FFD43B' },
+        { name: '翠绿', hex: '#69DB7C' },
+        { name: '天蓝', hex: '#74C0FC' },
+        { name: '亮紫', hex: '#D0BFFF' },
+        { name: '纯白', hex: '#FFFFFF' },
+        { name: '浅灰', hex: '#9CA3AF' }
+      ];
+
+      let systemFonts = [
+        { name: '微软雅黑', css: DEFAULT_FONT_FAMILY },
+        { name: '宋体', css: "'SimSun', 'NSimSun', serif" },
+        { name: '黑体', css: "'SimHei', 'Microsoft YaHei UI', sans-serif" },
+        { name: '楷体', css: "'KaiTi', 'STKaiti', serif" },
+        { name: '仿宋', css: "'FangSong', 'STFangsong', serif" },
+        { name: '等线', css: "'DengXian', 'Microsoft YaHei UI', sans-serif" },
+        { name: 'Consolas', css: "'Consolas', 'Cascadia Mono', monospace" }
+      ];
+
+      let vditor = null;
+      let currentPageId = null;
+      let isProgrammatic = false;
+      let isEditorReady = false;
+      let pendingLoad = null;
+      let changeTimer = null;
+
+      let currentHeaderBg = DEFAULT_HEADER_BG;
+      let currentFirstColBg = DEFAULT_FIRSTCOL_BG;
+      let currentCellBg = DEFAULT_CELL_BG;
+      let currentFontFamily = DEFAULT_FONT_FAMILY;
+      let currentZoomPercent = 100;
+      let activeColorTarget = 'header';
+      let zoomHudTimer = null;
+      let selectedImageEl = null;
+
+      let currentHighlight = HIGHLIGHT_COLOR_PRESETS[0];
+      let currentTextColor = TEXT_COLOR_PRESETS[0].hex;
+      let activePaletteKind = null;
+      let savedSelectionRange = null;
+
+      // 表格内 Ctrl+A 渐进全选状态：0=无, 1=单元格内所有内容, 2=当前单元格, 3=所有单元格
+      let tableSelectStage = 0;
+      let tableSelectCell = null;
+      let tableSelectTable = null;
+
+      const zoomHud = document.getElementById('zoom-hud');
+      const colorPopover = document.getElementById('color-popover');
+      const colorPopTitle = document.getElementById('color-pop-title');
+      const colorPopSwatches = document.getElementById('color-pop-swatches');
+      const colorHexInput = document.getElementById('color-hex-input');
+      const colorHexApplyBtn = document.getElementById('color-hex-apply');
+      const colorResetBtn = document.getElementById('color-reset-btn');
+
+      const fontPopover = document.getElementById('font-popover');
+      const fontPopTitle = document.getElementById('font-pop-title');
+      const fontPopList = document.getElementById('font-pop-list');
+      const fontPopCount = document.getElementById('font-pop-count');
+      const fontSearchInput = document.getElementById('font-search-input');
+      const fontZoomSummary = document.getElementById('font-zoom-summary');
+      const zoomResetBtn = document.getElementById('zoom-reset-btn');
+      const fontResetBtn = document.getElementById('font-reset-btn');
+
+      const selectionBar = document.getElementById('selection-bar');
+      const selectionPalette = document.getElementById('selection-palette');
+      const selPaletteTitle = document.getElementById('sel-palette-title');
+      const selPaletteGrid = document.getElementById('sel-palette-grid');
+      const selPaletteClear = document.getElementById('sel-palette-clear');
+      const selHlApply = document.getElementById('sel-hl-apply');
+      const selHlMenu = document.getElementById('sel-hl-menu');
+      const selHlBar = document.getElementById('sel-hl-bar');
+      const selFgApply = document.getElementById('sel-fg-apply');
+      const selFgMenu = document.getElementById('sel-fg-menu');
+      const selFgBar = document.getElementById('sel-fg-bar');
+      let fontPopoverHasSelection = false;
+      let savedFontSelectionRange = null;
+
+      function postToHost(payload) {
+        if (window.chrome && window.chrome.webview) {
+          window.chrome.webview.postMessage(payload);
+        }
+      }
+
+      function normalizeHexOrNull(raw) {
+        if (typeof raw !== 'string') return null;
+        let t = raw.trim();
+        if (!t.startsWith('#')) t = '#' + t;
+        const hex = t.slice(1);
+        if (/^[0-9a-f]{6}$/i.test(hex)) return '#' + hex.toUpperCase();
+        if (/^[0-9a-f]{3}$/i.test(hex)) {
+          return '#' + (hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2]).toUpperCase();
+        }
+        return null;
+      }
+
+      function pickContrastForeground(hex) {
+        const norm = normalizeHexOrNull(hex);
+        if (!norm) return '#E6EDF3';
+        const n = parseInt(norm.slice(1), 16);
+        const r = (n >> 16) & 255;
+        const g = (n >> 8) & 255;
+        const b = n & 255;
+        const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return luma >= 0.58 ? '#111827' : '#FFFFFF';
+      }
+
+      function syncToolbarSwatches() {
+        const s1 = document.getElementById('tb-swatch-header');
+        const s2 = document.getElementById('tb-swatch-firstcol');
+        const s3 = document.getElementById('tb-swatch-cell');
+        if (s1) s1.style.backgroundColor = currentHeaderBg;
+        if (s2) s2.style.backgroundColor = currentFirstColBg;
+        if (s3) s3.style.backgroundColor = currentCellBg;
+      }
+
+      function syncFontToolbarLabel() {
+        const lbl = document.getElementById('tb-font-label');
+        if (lbl) {
+          lbl.textContent = currentZoomPercent === 100 ? '字体' : ('字体 ' + currentZoomPercent + '%');
+        }
+        if (fontZoomSummary) {
+          fontZoomSummary.textContent = '当前缩放：' + currentZoomPercent + '%（正文区按 Ctrl+滚轮 缩放，Ctrl+0 还原）';
+        }
+      }
+
+      function applyTableColors(colors) {
+        if (!colors) return;
+        const root = document.documentElement.style;
+        if (colors.headerBg) {
+          currentHeaderBg = colors.headerBg;
+          root.setProperty('--tbl-header-bg', currentHeaderBg);
+          root.setProperty('--tbl-header-fg', pickContrastForeground(currentHeaderBg));
+        }
+        if (colors.firstColBg) {
+          currentFirstColBg = colors.firstColBg;
+          root.setProperty('--tbl-firstcol-bg', currentFirstColBg);
+          root.setProperty('--tbl-firstcol-fg', pickContrastForeground(currentFirstColBg));
+        }
+        if (colors.cellBg) {
+          currentCellBg = colors.cellBg;
+          root.setProperty('--tbl-cell-bg', currentCellBg);
+          root.setProperty('--tbl-cell-fg', pickContrastForeground(currentCellBg));
+        }
+        syncToolbarSwatches();
+      }
+
+      function setCanvasZoom(nextPercent, notifyHost, showHud) {
+        const clamped = Math.min(200, Math.max(50, Math.round(nextPercent / 10) * 10 || 100));
+        currentZoomPercent = clamped;
+        document.documentElement.style.setProperty('--editor-zoom', (currentZoomPercent / 100).toFixed(2));
+        syncFontToolbarLabel();
+        positionTableBar();
+
+        if (showHud && zoomHud) {
+          zoomHud.textContent = currentZoomPercent + '%';
+          zoomHud.classList.add('is-visible');
+          if (zoomHudTimer) clearTimeout(zoomHudTimer);
+          zoomHudTimer = setTimeout(() => zoomHud.classList.remove('is-visible'), 1100);
+        }
+
+        if (notifyHost) {
+          postToHost({ type: 'zoomChanged', zoom: currentZoomPercent });
+        }
+      }
+
+      function applyTypography(typography) {
+        if (!typography) return;
+        const root = document.documentElement.style;
+        if (typeof typography.fontFamily === 'string' && typography.fontFamily.trim()) {
+          currentFontFamily = typography.fontFamily.trim();
+          root.setProperty('--editor-font-family', currentFontFamily);
+        }
+        if (typeof typography.zoomPercent === 'number' && typography.zoomPercent >= 50 && typography.zoomPercent <= 200) {
+          setCanvasZoom(typography.zoomPercent, false, false);
+        }
+      }
+
+      function emitContentChangedImmediate() {
+        if (!vditor || !isEditorReady || !currentPageId || isProgrammatic) return;
+        if (changeTimer) {
+          clearTimeout(changeTimer);
+          changeTimer = null;
+        }
+        postToHost({
+          type: 'contentChanged',
+          pageId: currentPageId,
+          markdown: vditor.getValue()
+        });
+      }
+
+      function scheduleContentChanged() {
+        if (!vditor || !isEditorReady || !currentPageId || isProgrammatic) return;
+        if (changeTimer) clearTimeout(changeTimer);
+        const capturedPageId = currentPageId;
+        changeTimer = setTimeout(() => {
+          changeTimer = null;
+          if (!vditor || !isEditorReady || isProgrammatic || currentPageId !== capturedPageId) return;
+          postToHost({
+            type: 'contentChanged',
+            pageId: capturedPageId,
+            markdown: vditor.getValue()
+          });
+        }, 200);
+      }
+
+      function compressImageFile(file) {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onerror = () => resolve(null);
+          reader.onload = () => {
+            const rawUrl = reader.result;
+            if (typeof rawUrl !== 'string') {
+              resolve(null);
+              return;
+            }
+
+            if (file.type === 'image/gif') {
+              resolve(rawUrl);
+              return;
+            }
+
+            const img = new Image();
+            img.onerror = () => resolve(rawUrl);
+            img.onload = () => {
+              const maxWidth = 1600;
+              const needResize = img.width > maxWidth;
+              if (!needResize && rawUrl.length <= 220 * 1024) {
+                resolve(rawUrl);
+                return;
+              }
+
+              const scale = needResize ? maxWidth / img.width : 1;
+              const w = Math.max(1, Math.round(img.width * scale));
+              const h = Math.max(1, Math.round(img.height * scale));
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext('2d');
+              if (!ctx) {
+                resolve(rawUrl);
+                return;
+              }
+
+              ctx.drawImage(img, 0, 0, w, h);
+              const pngUrl = canvas.toDataURL('image/png');
+              if (pngUrl.length <= 220 * 1024) {
+                resolve(pngUrl);
+                return;
+              }
+
+              const jpegCanvas = document.createElement('canvas');
+              jpegCanvas.width = w;
+              jpegCanvas.height = h;
+              const jctx = jpegCanvas.getContext('2d');
+              if (jctx) {
+                jctx.fillStyle = '#0D1117';
+                jctx.fillRect(0, 0, w, h);
+                jctx.drawImage(img, 0, 0, w, h);
+                const jpegUrl = jpegCanvas.toDataURL('image/jpeg', 0.85);
+                resolve(jpegUrl.length < pngUrl.length ? jpegUrl : pngUrl);
+                return;
+              }
+
+              resolve(pngUrl);
+            };
+            img.src = rawUrl;
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function extFromMime(mime) {
+        const m = (mime || '').toLowerCase();
+        if (m.includes('jpeg') || m.includes('jpg')) return '.jpg';
+        if (m.includes('gif')) return '.gif';
+        if (m.includes('webp')) return '.webp';
+        if (m.includes('bmp')) return '.bmp';
+        return '.png';
+      }
+
+      async function handleUploadFiles(files) {
+        if (!vditor || !currentPageId || !files || files.length === 0) return null;
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (!file || (file.type && !file.type.startsWith('image/'))) continue;
+          const dataUrl = await compressImageFile(file);
+          if (!dataUrl) continue;
+
+          const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/i.exec(dataUrl);
+          if (!m) continue;
+          const mimeType = m[1];
+          const base64 = m[2];
+          const imageId = 'img_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + extFromMime(mimeType);
+          const safeAlt = (file.name || 'image').replace(/[\[\]\r\n]/g, '').trim() || 'image';
+
+          // 将图片二进制交由宿主缓存落盘并入库，再由宿主回调插入极短的虚拟地址链接，彻底避免 Base64 撑死编辑器
+          postToHost({
+            type: 'saveImage',
+            pageId: currentPageId,
+            imageId: imageId,
+            mimeType: mimeType,
+            base64: base64,
+            alt: safeAlt
+          });
+        }
+        return null;
+      }
+
+      function isCaretInTableCell() {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return false;
+        let node = sel.anchorNode;
+        if (!node) return false;
+        if (node.nodeType === 3) node = node.parentElement;
+        return Boolean(node && node.closest && node.closest('td, th'));
+      }
+
+      function getActiveEditorElement() {
+        if (!vditor || !vditor.vditor) return document.body;
+        const core = vditor.vditor;
+        const mode = core.currentMode || 'ir';
+        if (mode === 'wysiwyg' && core.wysiwyg && core.wysiwyg.element) return core.wysiwyg.element;
+        if (mode === 'sv' && core.sv && core.sv.element) return core.sv.element;
+        if (core.ir && core.ir.element) return core.ir.element;
+        return document.getElementById('vditor');
+      }
+
+      function clearSearchHighlight() {
+        if (window.CSS && CSS.highlights) {
+          CSS.highlights.delete('sinnote-find-all');
+          CSS.highlights.delete('sinnote-find-active');
+        }
+      }
+
+      function highlightSearch(query, targetOccurrenceIndex) {
+        clearSearchHighlight();
+        if (!query || !query.trim() || !window.CSS || !CSS.highlights) return;
+        const q = query.trim().toLowerCase();
+        const root = getActiveEditorElement();
+        if (!root) return;
+
+        const ranges = [];
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+          acceptNode(node) {
+            if (!node.nodeValue || !node.parentElement) return NodeFilter.FILTER_REJECT;
+            const parent = node.parentElement;
+            const style = window.getComputedStyle(parent);
+            if (style.display === 'none' || style.visibility === 'hidden') return NodeFilter.FILTER_REJECT;
+            if (parent.closest('.vditor-ir__marker--link')
+              && (node.nodeValue.includes('data:image/') || node.nodeValue.includes('sinnote-img.local/'))) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        });
+
+        let node;
+        while ((node = walker.nextNode())) {
+          const text = node.nodeValue.toLowerCase();
+          let start = 0;
+          while (true) {
+            const idx = text.indexOf(q, start);
+            if (idx < 0) break;
+            const range = document.createRange();
+            range.setStart(node, idx);
+            range.setEnd(node, idx + q.length);
+            ranges.push(range);
+            start = idx + Math.max(1, q.length);
+          }
+        }
+
+        if (ranges.length === 0) return;
+        CSS.highlights.set('sinnote-find-all', new Highlight(...ranges));
+
+        const activeIdx = Math.min(Math.max(0, targetOccurrenceIndex || 0), ranges.length - 1);
+        const activeRange = ranges[activeIdx];
+        CSS.highlights.set('sinnote-find-active', new Highlight(activeRange));
+
+        const rect = activeRange.getBoundingClientRect();
+        if (rect && (rect.width > 0 || rect.height > 0)) {
+          const container = root;
+          if (container && container.scrollHeight > container.clientHeight) {
+            const cRect = container.getBoundingClientRect();
+            const delta = rect.top - cRect.top - cRect.height / 2;
+            container.scrollBy({ top: delta, behavior: 'smooth' });
+          } else if (activeRange.startContainer.parentElement) {
+            activeRange.startContainer.parentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }
+
+      // ---------- 图片选中与删除、双击页内放大 ----------
+      function clearSelectedImage() {
+        if (selectedImageEl) {
+          selectedImageEl.classList.remove('sinnote-img-selected');
+          selectedImageEl = null;
+        }
+      }
+
+      function selectImageElement(img) {
+        if (!img) return;
+        if (selectedImageEl && selectedImageEl !== img) {
+          selectedImageEl.classList.remove('sinnote-img-selected');
+        }
+        selectedImageEl = img;
+        img.classList.add('sinnote-img-selected');
+
+        const root = getActiveEditorElement();
+        if (root && document.activeElement !== root) {
+          root.focus({ preventScroll: true });
+        }
+      }
+
+      function deleteSelectedImage() {
+        if (!selectedImageEl || !document.body.contains(selectedImageEl)) {
+          clearSelectedImage();
+          return false;
+        }
+
+        const img = selectedImageEl;
+        const wrapper = img.closest('span.vditor-ir__node[data-type="img"]')
+          || img.closest('span.vditor-ir__node')
+          || img;
+        const parent = wrapper.parentNode;
+        const idx = parent ? Array.prototype.indexOf.call(parent.childNodes, wrapper) : -1;
+
+        recordUndoSnapshot();
+        wrapper.remove();
+        clearSelectedImage();
+
+        if (parent && parent.isConnected) {
+          try {
+            const sel = window.getSelection();
+            const range = document.createRange();
+            const safeIdx = Math.max(0, Math.min(idx, parent.childNodes.length));
+            range.setStart(parent, safeIdx);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          } catch (_) {
+            // ignore
+          }
+        }
+
+        recordUndoSnapshot();
+        emitContentChangedImmediate();
+        return true;
+      }
+
+      function closeAllPopovers() {
+        if (colorPopover) colorPopover.hidden = true;
+        if (fontPopover) fontPopover.hidden = true;
+        if (selectionPalette) selectionPalette.hidden = true;
+        activePaletteKind = null;
+      }
+
+      function clearTableCellSelection() {
+        tableSelectStage = 0;
+        tableSelectCell = null;
+        tableSelectTable = null;
+        document.querySelectorAll('.sinnote-cell-selected').forEach((el) => {
+          el.classList.remove('sinnote-cell-selected');
+        });
+      }
+
+      function hideSelectionBar() {
+        if (selectionBar) selectionBar.hidden = true;
+        if (selectionPalette) selectionPalette.hidden = true;
+        activePaletteKind = null;
+      }
+
+      function applyLoadPayload(payload) {
+        if (!payload) return;
+        if (!vditor || !isEditorReady) {
+          pendingLoad = payload;
+          return;
+        }
+
+        const nextPageId = payload.pageId || null;
+        if (changeTimer && currentPageId && currentPageId !== nextPageId && !isProgrammatic) {
+          emitContentChangedImmediate();
+        } else if (changeTimer) {
+          clearTimeout(changeTimer);
+          changeTimer = null;
+        }
+
+        const nextMd = typeof payload.markdown === 'string' ? payload.markdown : '';
+        const shouldReloadValue = Boolean(payload.force) || currentPageId !== nextPageId || vditor.getValue() !== nextMd;
+        currentPageId = nextPageId;
+        applyTableColors(payload.colors);
+        applyTypography(payload.typography);
+        closeAllPopovers();
+        hideSelectionBar();
+        clearTableCellSelection();
+
+        if (shouldReloadValue) {
+          clearSearchHighlight();
+          clearSelectedImage();
+          hideTableBar();
+          isProgrammatic = true;
+          try {
+            vditor.setValue(nextMd, true);
+          } finally {
+            setTimeout(() => {
+              isProgrammatic = false;
+              hydrateInlineHtmlStyles();
+            }, 40);
+          }
+        } else {
+          hydrateInlineHtmlStyles();
+        }
+      }
+
+      window.sinNoteApi = {
+        loadPage: applyLoadPayload,
+        setTableColors: applyTableColors,
+        setTypography: applyTypography,
+        setSystemFonts(list) {
+          if (Array.isArray(list) && list.length > 0) {
+            systemFonts = list.filter((f) => f && typeof f.name === 'string' && typeof f.css === 'string');
+          }
+        },
+        insertImageUrl(alt, url) {
+          if (!vditor || !isEditorReady || !url) return;
+          const safeAlt = (alt || 'image').replace(/[\[\]\r\n]/g, '').trim() || 'image';
+          const md = '![' + safeAlt + '](' + url + ')';
+          const inCell = isCaretInTableCell();
+          vditor.focus();
+          vditor.insertValue(inCell ? md : ('\n' + md + '\n'), true);
+          emitContentChangedImmediate();
+        },
+        highlightSearch,
+        clearSearchHighlight,
+        focusEditor() {
+          if (vditor && isEditorReady) vditor.focus();
+        },
+        flush() {
+          emitContentChangedImmediate();
+        }
+      };
+
+      window.addEventListener('wheel', (e) => {
+        if (e.ctrlKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.deltaY === 0) return;
+          const step = e.deltaY < 0 ? 10 : -10;
+          setCanvasZoom(currentZoomPercent + step, true, true);
+        }
+      }, { passive: false, capture: true });
+
+      function handleTableProgressiveSelectAll() {
+        const root = getActiveEditorElement();
+        if (!root) return false;
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return false;
+
+        let anchor = sel.anchorNode;
+        if (!anchor) return false;
+        if (anchor.nodeType === 3) anchor = anchor.parentElement;
+        if (!anchor || !root.contains(anchor)) return false;
+
+        const cell = anchor.closest ? anchor.closest('td, th') : null;
+        const table = cell ? cell.closest('table') : (tableSelectStage >= 2 ? tableSelectTable : null);
+        if (!table || !root.contains(table)) {
+          clearTableCellSelection();
+          return false;
+        }
+
+        const effectiveCell = cell || tableSelectCell;
+        if (!effectiveCell) return false;
+
+        // 判断是否在同一单元格上连续按 Ctrl+A
+        const sameTarget = (tableSelectTable === table) && (tableSelectCell === effectiveCell);
+        const nextStage = sameTarget ? (tableSelectStage + 1) : 1;
+
+        document.querySelectorAll('.sinnote-cell-selected').forEach((el) => el.classList.remove('sinnote-cell-selected'));
+
+        if (nextStage === 1) {
+          // 第 1 次 Ctrl+A：选中当前单元格内的所有内容
+          const range = document.createRange();
+          range.selectNodeContents(effectiveCell);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          tableSelectStage = 1;
+          tableSelectCell = effectiveCell;
+          tableSelectTable = table;
+          return true;
+        }
+
+        if (nextStage === 2) {
+          // 第 2 次 Ctrl+A（Ctrl+A+A）：选中当前单元格
+          effectiveCell.classList.add('sinnote-cell-selected');
+          const range = document.createRange();
+          range.selectNodeContents(effectiveCell);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          tableSelectStage = 2;
+          tableSelectCell = effectiveCell;
+          tableSelectTable = table;
+          return true;
+        }
+
+        if (nextStage === 3) {
+          // 第 3 次 Ctrl+A（Ctrl+A+A+A）：选中当前表格内所有单元格
+          table.querySelectorAll('th, td').forEach((c) => c.classList.add('sinnote-cell-selected'));
+          const range = document.createRange();
+          range.selectNode(table);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          tableSelectStage = 3;
+          tableSelectCell = effectiveCell;
+          tableSelectTable = table;
+          return true;
+        }
+
+        // 第 4 次 Ctrl+A：全选整页正文
+        clearTableCellSelection();
+        const fullRange = document.createRange();
+        fullRange.selectNodeContents(root);
+        sel.removeAllRanges();
+        sel.addRange(fullRange);
+        return true;
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          const previewLayer = document.querySelector('.vditor-img');
+          if (previewLayer) {
+            e.preventDefault();
+            e.stopPropagation();
+            previewLayer.remove();
+            document.body.style.overflow = '';
+            return;
+          }
+
+          if ((colorPopover && !colorPopover.hidden) || (fontPopover && !fontPopover.hidden) || (selectionPalette && !selectionPalette.hidden)) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeAllPopovers();
+            return;
+          }
+
+          if (tableSelectStage > 0) {
+            e.preventDefault();
+            clearTableCellSelection();
+            return;
+          }
+
+          if (selectedImageEl) {
+            e.preventDefault();
+            clearSelectedImage();
+            return;
+          }
+        }
+
+        if ((e.key === 'Backspace' || e.key === 'Delete') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          if (selectedImageEl && document.body.contains(selectedImageEl)) {
+            e.preventDefault();
+            e.stopPropagation();
+            deleteSelectedImage();
+            return;
+          }
+
+          if (tableSelectStage === 2 && tableSelectCell && document.body.contains(tableSelectCell)) {
+            e.preventDefault();
+            e.stopPropagation();
+            recordUndoSnapshot();
+            tableSelectCell.innerHTML = '';
+            const c = tableSelectCell;
+            clearTableCellSelection();
+            placeCaretInCell(c);
+            recordUndoSnapshot();
+            emitContentChangedImmediate();
+            return;
+          }
+
+          if (tableSelectStage === 3 && tableSelectTable && document.body.contains(tableSelectTable)) {
+            e.preventDefault();
+            e.stopPropagation();
+            recordUndoSnapshot();
+            const firstCell = tableSelectTable.querySelector('th, td');
+            tableSelectTable.querySelectorAll('th, td').forEach((c) => { c.innerHTML = ''; });
+            clearTableCellSelection();
+            if (firstCell) placeCaretInCell(firstCell);
+            recordUndoSnapshot();
+            emitContentChangedImmediate();
+            return;
+          }
+        }
+
+        if (selectedImageEl && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'].includes(e.key)) {
+          clearSelectedImage();
+        }
+
+        // Ctrl+Alt+H：快速给选中文本应用当前高亮色（与 OneNote 快捷键一致）
+        if (e.ctrlKey && e.altKey && (e.key || '').toUpperCase() === 'H') {
+          const sel = window.getSelection();
+          if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            savedSelectionRange = sel.getRangeAt(0).cloneRange();
+            applyHighlightToSelection(currentHighlight.bg, currentHighlight.fg);
+            return;
+          }
+        }
+
+        if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key || '').toUpperCase() === 'A') {
+          const activeEl = document.activeElement;
+          const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+          if (!isInput && handleTableProgressiveSelectAll()) {
+            e.preventDefault();
+            e.stopPropagation();
+            updateSelectionBarSoon();
+            return;
+          }
+        } else if (!e.ctrlKey || (e.key || '').toUpperCase() !== 'C') {
+          if (tableSelectStage > 0 && e.key !== 'Control') {
+            clearTableCellSelection();
+          }
+        }
+
+        if (e.ctrlKey && !e.altKey) {
+          const k = (e.key || '').toUpperCase();
+          if (k === 'F' || k === 'E') {
+            e.preventDefault();
+            e.stopPropagation();
+            closeAllPopovers();
+            postToHost({ type: 'shortcut', key: k });
+            return;
+          }
+          if (k === 'S') {
+            e.preventDefault();
+            e.stopPropagation();
+            emitContentChangedImmediate();
+            postToHost({ type: 'shortcut', key: 'S' });
+            return;
+          }
+          if (e.key === '0' || e.code === 'Numpad0') {
+            e.preventDefault();
+            e.stopPropagation();
+            setCanvasZoom(100, true, true);
+            return;
+          }
+          if (e.key === '=' || e.key === '+' || e.code === 'NumpadAdd') {
+            e.preventDefault();
+            e.stopPropagation();
+            setCanvasZoom(currentZoomPercent + 10, true, true);
+            return;
+          }
+          if (e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') {
+            e.preventDefault();
+            e.stopPropagation();
+            setCanvasZoom(currentZoomPercent - 10, true, true);
+            return;
+          }
+        }
+      }, true);
+
+      document.addEventListener('mousedown', (e) => {
+        postToHost({ type: 'editorFocused' });
+
+        const target = e.target;
+        const inPop = (colorPopover && colorPopover.contains(target))
+          || (fontPopover && fontPopover.contains(target))
+          || (selectionBar && selectionBar.contains(target))
+          || (selectionPalette && selectionPalette.contains(target))
+          || (target && target.closest && target.closest('.sinnote-tb-btn'));
+        if (!inPop) {
+          closeAllPopovers();
+          clearTableCellSelection();
+        }
+
+        if (target && target.tagName === 'IMG' && target.closest('.vditor-reset') && !target.closest('.vditor-img')) {
+          if (e.button === 0 && !e.ctrlKey && !e.shiftKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            selectImageElement(target);
+            return;
+          }
+        }
+
+        if (!(selectionBar && selectionBar.contains(target)) && !(selectionPalette && selectionPalette.contains(target))) {
+          clearSelectedImage();
+        }
+      }, true);
+
+      document.addEventListener('paste', (e) => {
+        if (!vditor || !vditor.vditor) return;
+        if ((vditor.vditor.currentMode || 'ir') === 'sv') return;
+
+        const root = getActiveEditorElement();
+        const sel = window.getSelection();
+        if (!root || !sel || sel.rangeCount === 0) return;
+
+        let anchor = sel.anchorNode;
+        if (!anchor) return;
+        if (anchor.nodeType === 3) anchor = anchor.parentElement;
+        if (!anchor || !root.contains(anchor)) return;
+
+        const cell = anchor.closest ? anchor.closest('td, th') : null;
+        if (!cell || !root.contains(cell)) return;
+
+        const dt = e.clipboardData;
+        if (!dt) return;
+
+        // 剪贴板含图片文件时交给 Vditor 的上传/压缩流程处理
+        if (dt.files && dt.files.length > 0) {
+          for (let i = 0; i < dt.files.length; i++) {
+            if (dt.files[i].type && dt.files[i].type.startsWith('image/')) {
+              return;
+            }
+          }
+        }
+
+        // 剪贴板若是完整的 HTML 表格（如从 Excel 多列复制），放行原生处理
+        const htmlText = dt.getData('text/html') || '';
+        if (/<table[\s>]/i.test(htmlText) && /<td[\s>]/i.test(htmlText)) {
+          // 仅当包含多列单元格时放行；单单元格多行 HTML 仍落入当前单元格
+          const tdMatches = htmlText.match(/<(td|th)[\s>]/gi);
+          if (tdMatches && tdMatches.length > 1) {
+            return;
+          }
+        }
+
+        const plain = dt.getData('text/plain');
+        if (!plain || (!plain.includes('\n') && !plain.includes('\r'))) {
+          return;
+        }
+
+        // 多行文本粘贴进单个表格单元格：转为单元格内 <br> 换行，绝不拆散到多行表格或外部段落
+        e.preventDefault();
+        e.stopPropagation();
+
+        const normalized = plain.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n+$/g, '');
+        const lines = normalized.split('\n');
+        if (lines.length === 0) return;
+
+        recordUndoSnapshot();
+
+        const range = sel.getRangeAt(0);
+        // 若选区跨越了单元格边界，收拢到当前单元格内
+        if (!cell.contains(range.endContainer)) {
+          range.selectNodeContents(cell);
+          range.collapse(false);
+        } else if (!range.collapsed) {
+          range.deleteContents();
+        }
+
+        const frag = document.createDocumentFragment();
+        let lastNode = null;
+        lines.forEach((line, idx) => {
+          if (idx > 0) {
+            const br = document.createElement('br');
+            frag.appendChild(br);
+            lastNode = br;
+          }
+          if (line.length > 0) {
+            const tn = document.createTextNode(line);
+            frag.appendChild(tn);
+            lastNode = tn;
+          }
+        });
+
+        range.insertNode(frag);
+        if (lastNode) {
+          const caretRange = document.createRange();
+          caretRange.setStartAfter(lastNode);
+          caretRange.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(caretRange);
+        }
+
+        recordUndoSnapshot();
+        updateTableBarSoon();
+        emitContentChangedImmediate();
+      }, true);
+
+      document.addEventListener('dblclick', (e) => {
+        const target = e.target;
+        if (target && target.tagName === 'IMG' && target.closest('.vditor-reset') && !target.closest('.vditor-img')) {
+          e.preventDefault();
+          e.stopPropagation();
+          clearSelectedImage();
+          if (window.Vditor && typeof window.Vditor.previewImage === 'function' && !document.querySelector('.vditor-img')) {
+            window.Vditor.previewImage(target, 'zh_CN', 'dark');
+          }
+        }
+      }, true);
+
+      document.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target && target.tagName === 'IMG' && target.closest('.vditor-reset') && !target.closest('.vditor-img')) {
+          if (!e.ctrlKey && !e.shiftKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+        }
+
+        const link = target && target.closest ? target.closest('a[href]') : null;
+        if (link && (e.ctrlKey || link.closest('.vditor-preview'))) {
+          const href = link.getAttribute('href') || '';
+          if (/^https?:\/\//i.test(href)) {
+            e.preventDefault();
+            postToHost({ type: 'openLink', url: href });
+          }
+        }
+      }, true);
+
+      vditor = new Vditor('vditor', {
+        mode: 'ir',
+        theme: 'dark',
+        lang: 'zh_CN',
+        icon: 'ant',
+        cdn: 'https://sinnote.local/vditor',
+        width: '100%',
+        height: '100%',
+        cache: { enable: false },
+        placeholder: '开始输入 Markdown（# 标题、- 列表、``` 代码块、| 列1 | 列2 | 表格，Ctrl+V 粘贴截图，单击选图退格删除 / 双击页内放大）...',
+        toolbarConfig: {
+          pin: true
+        },
+        toolbar: [
+          'headings',
+          'bold',
+          'italic',
+          'strike',
+          '|',
+          'list',
+          'ordered-list',
+          'check',
+          '|',
+          'quote',
+          'code',
+          'inline-code',
+          'table',
+          'link',
+          'upload',
+          '|',
+          'undo',
+          'redo',
+          '|',
+          'edit-mode',
+          'outline'
+        ],
+        image: {
+          isPreview: false
+        },
+        preview: {
+          markdown: {
+            sanitize: false,
+            mark: true
+          },
+          theme: {
+            current: 'dark',
+            path: 'https://sinnote.local/vditor/dist/css/content-theme'
+          },
+          hljs: {
+            enable: true,
+            style: 'github-dark',
+            lineNumber: false
+          }
+        },
+        upload: {
+          accept: 'image/*',
+          multiple: true,
+          handler: handleUploadFiles
+        },
+        after() {
+          isEditorReady = true;
+          enhanceToolbarTooltips();
+          appendCustomToolbarItems();
+          bindPopoverEvents();
+          bindTableFloatingBar();
+          bindSelectionToolbar();
+          observeEditorInlineStyles();
+          postToHost({ type: 'ready' });
+          if (pendingLoad) {
+            const p = pendingLoad;
+            pendingLoad = null;
+            applyLoadPayload(p);
+          }
+        },
+        input() {
+          clearSearchHighlight();
+          clearSelectedImage();
+          scheduleContentChanged();
+          updateTableBarSoon();
+          scheduleHydrateStyles();
+        },
+        blur() {
+          emitContentChangedImmediate();
+        }
+      });
+
+      // ---------- 工具栏悬停说明增强与结尾整合 4 个自定义按钮 ----------
+      function enhanceToolbarTooltips() {
+        const map = {
+          headings: '标题（H1~H6 多级标题）',
+          bold: '粗体（加粗选中文字 <Ctrl+B>）',
+          italic: '斜体（倾斜选中文字 <Ctrl+I>）',
+          strike: '删除线（给文字加横线）',
+          list: '无序列表（项目圆点列表）',
+          'ordered-list': '有序列表（1. 2. 3. 编号列表）',
+          check: '任务列表（可勾选待办事项）',
+          quote: '引用块（段落缩进高亮引用）',
+          code: '代码块（多行代码高亮块）',
+          'inline-code': '行内代码（命令/变量高亮标记）',
+          table: '插入表格（点击表格内可增删行列）',
+          link: '插入链接（网页超链接）',
+          upload: '上传/插入图片（也可直接 Ctrl+V 粘贴截图）',
+          undo: '撤销上一步操作 <Ctrl+Z>',
+          redo: '重做下一步操作 <Ctrl+Y>',
+          'edit-mode': '切换编辑模式（即时渲染 / 所见即所得 / 分屏源码）',
+          outline: '显示或隐藏文档大纲'
+        };
+        document.querySelectorAll('.vditor-toolbar button[data-type]').forEach((btn) => {
+          const t = btn.getAttribute('data-type');
+          if (t && map[t]) {
+            btn.setAttribute('aria-label', map[t]);
+          }
+        });
+      }
+
+      function positionPopoverUnder(popEl, anchorEl) {
+        if (!popEl || !anchorEl) return;
+        const rect = anchorEl.getBoundingClientRect();
+        popEl.hidden = false;
+        const popRect = popEl.getBoundingClientRect();
+        let left = rect.left;
+        const maxLeft = Math.max(8, window.innerWidth - popRect.width - 12);
+        left = Math.min(Math.max(8, left), maxLeft);
+        const top = Math.round(rect.bottom + 6);
+        popEl.style.left = Math.round(left) + 'px';
+        popEl.style.top = top + 'px';
+      }
+
+      function commitTableColors() {
+        applyTableColors({
+          headerBg: currentHeaderBg,
+          firstColBg: currentFirstColBg,
+          cellBg: currentCellBg
+        });
+        postToHost({
+          type: 'tableColorsChanged',
+          headerBg: currentHeaderBg,
+          firstColBg: currentFirstColBg,
+          cellBg: currentCellBg
+        });
+      }
+
+      function applyColorHexForTarget(hex) {
+        const norm = normalizeHexOrNull(hex);
+        if (!norm) return false;
+        if (activeColorTarget === 'firstCol') {
+          currentFirstColBg = norm;
+        } else if (activeColorTarget === 'cell') {
+          currentCellBg = norm;
+        } else {
+          currentHeaderBg = norm;
+        }
+        commitTableColors();
+        return true;
+      }
+
+      function openColorPopover(targetKey, anchorBtn) {
+        const wasOpenSame = !colorPopover.hidden && activeColorTarget === targetKey;
+        closeAllPopovers();
+        if (wasOpenSame) return;
+
+        activeColorTarget = targetKey;
+        colorPopTitle.textContent = targetKey === 'firstCol'
+          ? '选择第一列背景色'
+          : targetKey === 'cell'
+            ? '选择其余正文单元格背景色'
+            : '选择第一行（表头）背景色';
+
+        colorHexInput.value = targetKey === 'firstCol'
+          ? currentFirstColBg
+          : targetKey === 'cell'
+            ? currentCellBg
+            : currentHeaderBg;
+
+        const presets = targetKey === 'cell' ? CELL_COLOR_PRESETS : HEADER_COLOR_PRESETS;
+        colorPopSwatches.innerHTML = '';
+        presets.forEach((p) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'sinnote-swatch-btn';
+          btn.style.backgroundColor = p.hex;
+          btn.title = p.name + ' (' + p.hex + ')';
+          btn.addEventListener('click', () => {
+            applyColorHexForTarget(p.hex);
+            colorPopover.hidden = true;
+          });
+          colorPopSwatches.appendChild(btn);
+        });
+
+        positionPopoverUnder(colorPopover, anchorBtn);
+      }
+
+      function renderSystemFontList(filterText) {
+        if (!fontPopList) return;
+        const q = (filterText || '').trim().toLowerCase();
+        fontPopList.innerHTML = '';
+
+        const allItems = [{ name: '微软雅黑（默认）', css: DEFAULT_FONT_FAMILY }].concat(
+          systemFonts.filter((f) => f.css.toLowerCase() !== DEFAULT_FONT_FAMILY.toLowerCase())
+        );
+        const filtered = q
+          ? allItems.filter((f) => f.name.toLowerCase().includes(q) || f.css.toLowerCase().includes(q))
+          : allItems;
+
+        if (fontPopCount) {
+          fontPopCount.textContent = filtered.length + ' 种';
+        }
+
+        if (filtered.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'sinnote-pop-hint';
+          empty.style.padding = '12px 6px';
+          empty.textContent = '未找到匹配的系统字体';
+          fontPopList.appendChild(empty);
+          return;
+        }
+
+        const frag = document.createDocumentFragment();
+        filtered.forEach((p) => {
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'sinnote-font-item';
+          const isActive = currentFontFamily.toLowerCase() === p.css.toLowerCase()
+            || currentFontFamily.split(',')[0].replace(/["']/g, '').trim().toLowerCase() === p.name.replace('（默认）', '').toLowerCase();
+          if (isActive) {
+            item.classList.add('is-active');
+          }
+          item.style.fontFamily = p.css;
+          item.textContent = p.name;
+          item.title = p.name;
+          item.addEventListener('click', () => {
+            if (fontPopoverHasSelection && savedFontSelectionRange) {
+              applyFontFamilyToSelection(p.css, savedFontSelectionRange);
+            } else {
+              applyTypography({ fontFamily: p.css });
+              postToHost({ type: 'fontFamilyChanged', fontFamily: p.css });
+            }
+            fontPopover.hidden = true;
+          });
+          frag.appendChild(item);
+        });
+        fontPopList.appendChild(frag);
+      }
+
+      function openFontPopover(anchorBtn) {
+        const wasOpen = !fontPopover.hidden;
+        closeAllPopovers();
+        if (wasOpen) return;
+
+        // 判断打开时是否存在有效文字/表格选区：有选区则仅改选中区域字体，不影响其他位置
+        const liveRange = getLiveOrSavedRange();
+        fontPopoverHasSelection = Boolean(liveRange && !liveRange.collapsed);
+        savedFontSelectionRange = fontPopoverHasSelection ? liveRange.cloneRange() : null;
+        if (fontPopTitle) {
+          fontPopTitle.textContent = fontPopoverHasSelection
+            ? '修改选中文字字体（仅局部生效）'
+            : '正文字体格式（未选中，改默认字体）';
+        }
+
+        if (fontSearchInput) {
+          fontSearchInput.value = '';
+        }
+        renderSystemFontList('');
+        syncFontToolbarLabel();
+        positionPopoverUnder(fontPopover, anchorBtn);
+
+        if (fontSearchInput) {
+          setTimeout(() => fontSearchInput.focus(), 10);
+        }
+      }
+
+      function appendCustomToolbarItems() {
+        const tb = document.querySelector('.vditor-toolbar');
+        if (!tb || tb.querySelector('#tb-font-btn')) return;
+
+        const alignDivider = document.createElement('div');
+        alignDivider.className = 'vditor-toolbar__divider';
+        tb.appendChild(alignDivider);
+
+        const alignSpecs = [
+          {
+            align: 'left',
+            label: '左对齐（段落或表格当前列）',
+            svg: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v1.6H2V3zm0 4h8v1.6H2V7zm0 4h11v1.6H2V11z"/></svg>'
+          },
+          {
+            align: 'center',
+            label: '居中对齐（段落或表格当前列）',
+            svg: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v1.6H2V3zm2 4h8v1.6H4V7zm-1 4h10v1.6H3V11z"/></svg>'
+          },
+          {
+            align: 'right',
+            label: '右对齐（段落或表格当前列）',
+            svg: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v1.6H2V3zm4 4h8v1.6H6V7zm-3 4h11v1.6H3V11z"/></svg>'
+          }
+        ];
+
+        alignSpecs.forEach((spec) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'sinnote-tb-btn vditor-tooltipped vditor-tooltipped__n';
+          btn.style.padding = '0 6px';
+          btn.setAttribute('aria-label', spec.label);
+          btn.innerHTML = spec.svg;
+          btn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            applyTextAlignment(spec.align);
+          });
+          tb.appendChild(btn);
+        });
+
+        const divider = document.createElement('div');
+        divider.className = 'vditor-toolbar__divider';
+        tb.appendChild(divider);
+
+        const makeColorBtn = (id, swatchId, label, ariaLabel, targetKey) => {
+          const btn = document.createElement('button');
+          btn.id = id;
+          btn.type = 'button';
+          btn.className = 'sinnote-tb-btn vditor-tooltipped vditor-tooltipped__n';
+          btn.setAttribute('aria-label', ariaLabel);
+          btn.innerHTML = '<span id="' + swatchId + '" class="sinnote-tb-swatch"></span><span>' + label + '</span>';
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openColorPopover(targetKey, btn);
+          });
+          return btn;
+        };
+
+        tb.appendChild(makeColorBtn('tb-header-btn', 'tb-swatch-header', '首行', '自定义表格首行表头背景色', 'header'));
+        tb.appendChild(makeColorBtn('tb-firstcol-btn', 'tb-swatch-firstcol', '首列', '自定义表格第一列背景色', 'firstCol'));
+        tb.appendChild(makeColorBtn('tb-cell-btn', 'tb-swatch-cell', '内容色', '自定义表格正文单元格背景色', 'cell'));
+
+        const fontBtn = document.createElement('button');
+        fontBtn.id = 'tb-font-btn';
+        fontBtn.type = 'button';
+        fontBtn.className = 'sinnote-tb-btn vditor-tooltipped vditor-tooltipped__nw';
+        fontBtn.setAttribute('aria-label', '选择系统字体库 / 还原画布缩放');
+        fontBtn.innerHTML = '<span class="sinnote-tb-aa">Aa</span><span id="tb-font-label">字体</span>';
+        fontBtn.addEventListener('mousedown', (e) => {
+          // 在按钮抢走焦点前先捕获当前选区，保证选中文字后点击 Aa 字体不会丢失选区
+          const r = getLiveOrSavedRange();
+          if (r && !r.collapsed) {
+            savedSelectionRange = r.cloneRange();
+          }
+          e.preventDefault();
+        });
+        fontBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openFontPopover(fontBtn);
+        });
+        tb.appendChild(fontBtn);
+
+        syncToolbarSwatches();
+        syncFontToolbarLabel();
+      }
+
+      function bindPopoverEvents() {
+        if (fontSearchInput) {
+          fontSearchInput.addEventListener('input', () => {
+            renderSystemFontList(fontSearchInput.value);
+          });
+        }
+        if (colorHexApplyBtn) {
+          colorHexApplyBtn.addEventListener('click', () => {
+            if (applyColorHexForTarget(colorHexInput.value)) {
+              colorPopover.hidden = true;
+            }
+          });
+        }
+        if (colorHexInput) {
+          colorHexInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              if (applyColorHexForTarget(colorHexInput.value)) {
+                colorPopover.hidden = true;
+              }
+            }
+          });
+        }
+        if (colorResetBtn) {
+          colorResetBtn.addEventListener('click', () => {
+            currentHeaderBg = DEFAULT_HEADER_BG;
+            currentFirstColBg = DEFAULT_FIRSTCOL_BG;
+            currentCellBg = DEFAULT_CELL_BG;
+            commitTableColors();
+            colorPopover.hidden = true;
+          });
+        }
+        if (zoomResetBtn) {
+          zoomResetBtn.addEventListener('click', () => {
+            setCanvasZoom(100, true, true);
+            fontPopover.hidden = true;
+          });
+        }
+        if (fontResetBtn) {
+          fontResetBtn.addEventListener('click', () => {
+            applyTypography({ fontFamily: DEFAULT_FONT_FAMILY, zoomPercent: 100 });
+            postToHost({ type: 'fontFamilyChanged', fontFamily: DEFAULT_FONT_FAMILY });
+            postToHost({ type: 'zoomChanged', zoom: 100 });
+            fontPopover.hidden = true;
+          });
+        }
+      }
+
+      // ---------- 表格专属悬浮扩展栏（IR / WYSIWYG 通用） ----------
+      const tableBar = document.getElementById('table-bar');
+      const tableDim = document.getElementById('table-dim');
+      let activeTable = null;
+      let activeRow = null;
+      let activeCell = null;
+      let scrollHookedEl = null;
+
+      function hideTableBar() {
+        activeTable = null;
+        activeRow = null;
+        activeCell = null;
+        if (tableBar) tableBar.hidden = true;
+      }
+
+      function recordUndoSnapshot() {
+        try {
+          if (vditor && vditor.vditor && vditor.vditor.undo) {
+            vditor.vditor.undo.addToUndoStack(vditor.vditor);
+          }
+        } catch (_) {
+          // ignore
+        }
+      }
+
+      function placeCaretInCell(cell) {
+        if (!cell) return;
+        const sel = window.getSelection();
+        if (!sel) return;
+        const range = document.createRange();
+        range.selectNodeContents(cell);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+
+      function getCurrentTableContext() {
+        if (!vditor || !vditor.vditor) return null;
+        const mode = vditor.vditor.currentMode || 'ir';
+        if (mode === 'sv') return null;
+
+        const root = getActiveEditorElement();
+        if (!root) return null;
+
+        if (scrollHookedEl !== root) {
+          scrollHookedEl = root;
+          root.addEventListener('scroll', positionTableBar, { passive: true });
+        }
+
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+
+        let node = sel.anchorNode;
+        if (!node) return null;
+        if (node.nodeType === 3) node = node.parentElement;
+        if (!node || !root.contains(node)) return null;
+
+        const cell = node.closest ? node.closest('td, th') : null;
+        const row = cell ? cell.closest('tr') : null;
+        const table = row ? row.closest('table') : null;
+        if (!cell || !row || !table || !root.contains(table)) return null;
+
+        return { table, row, cell };
+      }
+
+      function positionTableBar() {
+        if (!tableBar || !activeTable || !document.body.contains(activeTable)) {
+          hideTableBar();
+          return;
+        }
+        tableBar.hidden = false;
+      }
+
+      function updateTableBar() {
+        const ctx = getCurrentTableContext();
+        if (!ctx) {
+          hideTableBar();
+          return;
+        }
+
+        activeTable = ctx.table;
+        activeRow = ctx.row;
+        activeCell = ctx.cell;
+
+        const totalRows = activeTable.rows.length;
+        const totalCols = totalRows > 0 ? activeTable.rows[0].cells.length : 0;
+        if (tableDim) {
+          tableDim.textContent = totalRows + ' × ' + totalCols;
+        }
+
+        const tbody = activeTable.tBodies && activeTable.tBodies[0];
+        const inBody = Boolean(tbody && tbody.contains(activeRow));
+        const bodyRows = tbody ? Array.from(tbody.rows) : [];
+        const bodyIndex = inBody ? bodyRows.indexOf(activeRow) : -1;
+
+        const setDisabled = (act, disabled) => {
+          const btn = tableBar.querySelector('button[data-act="' + act + '"]');
+          if (btn) btn.disabled = Boolean(disabled);
+        };
+
+        setDisabled('delRow', totalRows <= 1);
+        setDisabled('delCol', totalCols <= 1);
+        setDisabled('moveUp', !inBody || bodyIndex <= 0);
+        setDisabled('moveDown', !inBody || bodyIndex < 0 || bodyIndex >= bodyRows.length - 1);
+
+        positionTableBar();
+      }
+
+      let tblBarTimer = null;
+      function updateTableBarSoon() {
+        if (tblBarTimer) clearTimeout(tblBarTimer);
+        tblBarTimer = setTimeout(updateTableBar, 16);
+      }
+
+      function createEmptyCell(tagName, align) {
+        const cell = document.createElement(tagName);
+        if (align) cell.setAttribute('align', align);
+        return cell;
+      }
+
+      function createRowWithTag(tagName, colCount, refRow) {
+        const tr = document.createElement('tr');
+        for (let c = 0; c < colCount; c++) {
+          const align = refRow && refRow.cells[c] ? refRow.cells[c].getAttribute('align') : null;
+          tr.appendChild(createEmptyCell(tagName, align));
+        }
+        return tr;
+      }
+
+      function performTableAction(act) {
+        if (!activeTable || !activeRow || !activeCell || !document.body.contains(activeTable)) {
+          return;
+        }
+
+        const table = activeTable;
+        const row = activeRow;
+        const cell = activeCell;
+        const colIdx = Math.max(0, Array.from(row.cells).indexOf(cell));
+        const colCount = table.rows.length > 0 ? table.rows[0].cells.length : 1;
+
+        const thead = table.tHead || table.querySelector('thead');
+        let tbody = table.tBodies && table.tBodies[0];
+        if (!tbody) {
+          tbody = table.createTBody();
+        }
+
+        const inHead = Boolean(thead && thead.contains(row));
+        recordUndoSnapshot();
+
+        let focusCell = cell;
+
+        if (act === 'rowBelow') {
+          if (inHead) {
+            const newTr = createRowWithTag('td', colCount, row);
+            tbody.insertBefore(newTr, tbody.firstElementChild);
+            focusCell = newTr.cells[Math.min(colIdx, newTr.cells.length - 1)];
+          } else {
+            const newTr = createRowWithTag('td', colCount, row);
+            row.insertAdjacentElement('afterend', newTr);
+            focusCell = newTr.cells[Math.min(colIdx, newTr.cells.length - 1)];
+          }
+        } else if (act === 'rowAbove') {
+          if (inHead) {
+            const demoted = document.createElement('tr');
+            Array.from(row.cells).forEach((th) => {
+              const td = createEmptyCell('td', th.getAttribute('align'));
+              td.innerHTML = th.innerHTML;
+              demoted.appendChild(td);
+              th.innerHTML = '';
+            });
+            tbody.insertBefore(demoted, tbody.firstElementChild);
+            focusCell = row.cells[Math.min(colIdx, row.cells.length - 1)];
+          } else {
+            const newTr = createRowWithTag('td', colCount, row);
+            row.insertAdjacentElement('beforebegin', newTr);
+            focusCell = newTr.cells[Math.min(colIdx, newTr.cells.length - 1)];
+          }
+        } else if (act === 'delRow') {
+          if (table.rows.length <= 1) return;
+          if (inHead) {
+            if (tbody.rows.length > 0) {
+              const firstBody = tbody.rows[0];
+              for (let c = 0; c < row.cells.length && c < firstBody.cells.length; c++) {
+                row.cells[c].innerHTML = firstBody.cells[c].innerHTML;
+              }
+              firstBody.remove();
+              focusCell = row.cells[Math.min(colIdx, row.cells.length - 1)];
+            }
+          } else {
+            const nextRow = row.nextElementSibling || row.previousElementSibling || (thead ? thead.rows[0] : null);
+            row.remove();
+            if (nextRow && nextRow.cells.length > 0) {
+              focusCell = nextRow.cells[Math.min(colIdx, nextRow.cells.length - 1)];
+            }
+          }
+        } else if (act === 'colLeft' || act === 'colRight') {
+          const insertAt = act === 'colLeft' ? colIdx : colIdx + 1;
+          Array.from(table.rows).forEach((tr) => {
+            const tag = (thead && thead.contains(tr)) ? 'th' : 'td';
+            const refCell = tr.cells[colIdx];
+            const align = refCell ? refCell.getAttribute('align') : null;
+            const newCell = createEmptyCell(tag, align);
+            if (insertAt < tr.cells.length) {
+              tr.insertBefore(newCell, tr.cells[insertAt]);
+            } else {
+              tr.appendChild(newCell);
+            }
+          });
+          focusCell = row.cells[Math.min(insertAt, row.cells.length - 1)];
+        } else if (act === 'delCol') {
+          if (colCount <= 1) return;
+          Array.from(table.rows).forEach((tr) => {
+            if (colIdx < tr.cells.length) {
+              tr.deleteCell(colIdx);
+            }
+          });
+          const nextCol = Math.min(colIdx, row.cells.length - 1);
+          focusCell = row.cells[Math.max(0, nextCol)];
+        } else if (act === 'moveUp') {
+          if (!inHead && row.previousElementSibling) {
+            tbody.insertBefore(row, row.previousElementSibling);
+            focusCell = row.cells[Math.min(colIdx, row.cells.length - 1)];
+          }
+        } else if (act === 'moveDown') {
+          if (!inHead && row.nextElementSibling) {
+            tbody.insertBefore(row.nextElementSibling, row);
+            focusCell = row.cells[Math.min(colIdx, row.cells.length - 1)];
+          }
+        }
+
+        if (focusCell) {
+          placeCaretInCell(focusCell);
+        }
+        recordUndoSnapshot();
+        updateTableBar();
+        emitContentChangedImmediate();
+      }
+
+      function bindTableFloatingBar() {
+        if (!tableBar) return;
+
+        // 将表格操作条停靠到 .vditor-toolbar 正下方（.vditor-content 之前），占据独立流高度，永不遮挡表格内容
+        const tb = document.querySelector('.vditor-toolbar');
+        if (tb && tb.parentNode) {
+          tb.parentNode.insertBefore(tableBar, tb.nextSibling);
+        }
+
+        tableBar.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+
+        tableBar.addEventListener('click', (e) => {
+          const btn = e.target && e.target.closest ? e.target.closest('button[data-act]') : null;
+          if (!btn || btn.disabled) return;
+          performTableAction(btn.getAttribute('data-act'));
+        });
+
+        document.addEventListener('selectionchange', updateTableBarSoon);
+        document.addEventListener('keyup', updateTableBarSoon, true);
+        document.addEventListener('click', updateTableBarSoon, true);
+        window.addEventListener('resize', positionTableBar);
+      }
+
+      // ---------- 文本对齐（左对齐 / 居中 / 右对齐） ----------
+      function applyTextAlignment(align) {
+        const root = getActiveEditorElement();
+        if (!root) return;
+        const sel = window.getSelection();
+        const range = (sel && sel.rangeCount > 0) ? sel.getRangeAt(0) : savedSelectionRange;
+        if (!range) return;
+
+        let node = range.commonAncestorContainer;
+        if (node.nodeType === 3) node = node.parentElement;
+        if (!node || !root.contains(node)) return;
+
+        // 1) 在表格单元格内：按 GFM 标准设置当前列对齐（align="left|center|right"）
+        const cell = node.closest ? node.closest('td, th') : null;
+        if (cell && root.contains(cell)) {
+          const row = cell.closest('tr');
+          const table = row ? row.closest('table') : null;
+          if (table) {
+            const colIdx = Array.from(row.cells).indexOf(cell);
+            recordUndoSnapshot();
+            Array.from(table.rows).forEach((tr) => {
+              const c = tr.cells[colIdx];
+              if (c) {
+                c.setAttribute('align', align);
+                c.style.textAlign = align;
+              }
+            });
+            recordUndoSnapshot();
+            emitContentChangedImmediate();
+            return;
+          }
+        }
+
+        // 2) 普通段落/标题：设置或更新外层 align 容器（HTML <div align="..."> 兼容 Markdown 持久化）
+        const block = node.closest ? node.closest('p, h1, h2, h3, h4, h5, h6, blockquote, li') : null;
+        if (!block || !root.contains(block)) return;
+
+        recordUndoSnapshot();
+        const alignedParent = block.parentElement && block.parentElement.tagName === 'DIV' && block.parentElement.hasAttribute('align')
+          ? block.parentElement
+          : null;
+
+        if (align === 'left') {
+          block.style.textAlign = '';
+          block.removeAttribute('align');
+          if (alignedParent && root.contains(alignedParent)) {
+            while (alignedParent.firstChild) {
+              alignedParent.parentNode.insertBefore(alignedParent.firstChild, alignedParent);
+            }
+            alignedParent.remove();
+          }
+        } else {
+          if (alignedParent) {
+            alignedParent.setAttribute('align', align);
+            alignedParent.style.textAlign = align;
+          } else {
+            block.setAttribute('align', align);
+            block.style.textAlign = align;
+          }
+        }
+
+        recordUndoSnapshot();
+        emitContentChangedImmediate();
+      }
+
+      // ---------- 选中文本浮动格式条（高亮 + 字体颜色 + 对齐 + 局部字体，跨单元格多选零破坏） ----------
+      function getLiveOrSavedRange() {
+        const root = getActiveEditorElement();
+        if (!root) return null;
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+          const r = sel.getRangeAt(0);
+          let anc = r.commonAncestorContainer;
+          if (anc.nodeType === 3) anc = anc.parentElement;
+          if (anc && root.contains(anc)) {
+            return r;
+          }
+        }
+        if (savedSelectionRange && !savedSelectionRange.collapsed) {
+          let anc = savedSelectionRange.commonAncestorContainer;
+          if (anc.nodeType === 3) anc = anc.parentElement;
+          if (anc && root.contains(anc)) {
+            return savedSelectionRange;
+          }
+        }
+        return null;
+      }
+
+      /**
+       * 收集选区内所有可见正文文本节点片段：
+       * - 严格排除 .vditor-ir__marker（Vditor IR 隐藏的 Markdown/HTML 源码标记节点），避免误高亮空标记；
+       * - 严格留在各自单元格/段落内部，绝不跨 <td>/<th>/<tr> 破坏表格结构。
+       */
+      function collectTextSlicesInRange(range) {
+        const root = getActiveEditorElement();
+        if (!root || !range || range.collapsed) return [];
+
+        const slices = [];
+        const common = range.commonAncestorContainer;
+
+        const isHiddenOrCode = (el) => {
+          if (!el || !root.contains(el)) return true;
+          if (el.closest && el.closest('.vditor-ir__marker, pre.vditor-ir__marker--pre, code.hljs, .vditor-ir__node[data-type="code-block"]')) {
+            return true;
+          }
+          return false;
+        };
+
+        if (common.nodeType === 3) {
+          if (isHiddenOrCode(common.parentElement)) return slices;
+          const s = range.startOffset;
+          const e = range.endOffset;
+          if (e > s && common.nodeValue && common.nodeValue.slice(s, e).replace(/\u200B/g, '').length > 0) {
+            slices.push({ node: common, start: s, end: e });
+          }
+          return slices;
+        }
+
+        const walker = document.createTreeWalker(common, NodeFilter.SHOW_TEXT, {
+          acceptNode(node) {
+            if (!node.nodeValue || node.nodeValue.replace(/\u200B/g, '').length === 0) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            if (isHiddenOrCode(node.parentElement)) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            try {
+              if (!range.intersectsNode(node)) return NodeFilter.FILTER_REJECT;
+            } catch (_) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        });
+
+        let tn;
+        while ((tn = walker.nextNode())) {
+          let start = 0;
+          let end = tn.nodeValue.length;
+          if (tn === range.startContainer) {
+            start = range.startOffset;
+          }
+          if (tn === range.endContainer) {
+            end = range.endOffset;
+          }
+          if (end > start && tn.nodeValue.slice(start, end).replace(/\u200B/g, '').length > 0) {
+            slices.push({ node: tn, start, end });
+          }
+        }
+        return slices;
+      }
+
+      function escapeHtmlText(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function sanitizeCssStyleValue(val) {
+        return String(val || '').replace(/"/g, "'").replace(/[;<>]/g, '').trim();
+      }
+
+      /**
+       * 直接构造 Vditor IR 标准行内 HTML 节点三元组（开标记 html-inline + 视觉代理 .sinnote-styled-proxy + 闭标记 html-inline），
+       * 无需经过 Lute 二次解析：
+       * - 浏览器立即按 inline style 渲染高亮、字体颜色与局部字体；
+       * - Vditor Lute VditorIRDOM2Md 自动忽略代理壳并 100% 完整保留 <mark style="..."> / <span style="..."> 到 Markdown。
+       */
+      function buildVditorIrHtmlInlineFragment(tagName, styleMap, rawText) {
+        const entries = Object.entries(styleMap).filter(([, v]) => v && String(v).trim());
+        const cleanText = String(rawText || '').replace(/\u200B/g, '');
+        if (!cleanText) return null;
+
+        const frag = document.createDocumentFragment();
+        if (entries.length === 0) {
+          frag.appendChild(document.createTextNode(cleanText));
+          return frag;
+        }
+
+        const styleStr = entries.map(([k, v]) => k + ':' + sanitizeCssStyleValue(v)).join(';');
+        const mode = (vditor && vditor.vditor && vditor.vditor.currentMode) || 'ir';
+
+        if (mode === 'wysiwyg') {
+          const el = document.createElement(tagName);
+          el.setAttribute('style', styleStr);
+          el.textContent = cleanText;
+          frag.appendChild(el);
+          return frag;
+        }
+
+        const openSpan = document.createElement('span');
+        openSpan.setAttribute('data-type', 'html-inline');
+        openSpan.className = 'vditor-ir__node';
+        const openCode = document.createElement('code');
+        openCode.className = 'vditor-ir__marker';
+        openCode.textContent = '<' + tagName + ' style="' + styleStr + '">';
+        openSpan.appendChild(openCode);
+
+        const proxy = document.createElement('span');
+        proxy.className = 'sinnote-styled-proxy';
+        proxy.setAttribute('data-tag', tagName);
+        proxy.setAttribute('style', styleStr);
+        proxy.textContent = cleanText;
+
+        const closeSpan = document.createElement('span');
+        closeSpan.setAttribute('data-type', 'html-inline');
+        closeSpan.className = 'vditor-ir__node';
+        const closeCode = document.createElement('code');
+        closeCode.className = 'vditor-ir__marker';
+        closeCode.textContent = '</' + tagName + '>';
+        closeSpan.appendChild(closeCode);
+
+        frag.appendChild(openSpan);
+        frag.appendChild(proxy);
+        frag.appendChild(closeSpan);
+        return frag;
+      }
+
+      /**
+       * 将 Vditor IR 中成对的 html-inline 隐藏标记（<mark style="..."> ... </mark> 或 <span style="..."> ... </span>）
+       * 中间的正文节点包裹为视觉代理 <span class="sinnote-styled-proxy" style="...">，使高亮、字色与局部字体立即实时生效；
+       * 且 Lute VditorIRDOM2Md 序列化时会自动忽略裸代理壳，100% 完整保留原始 Markdown HTML 标签。
+       */
+      function parseInlineOpenTag(markerText) {
+        const m = /^<(mark|span)\b[^>]*\bstyle\s*=\s*["']([^"']+)["'][^>]*>$/i.exec((markerText || '').trim());
+        if (!m) return null;
+        return { tag: m[1].toLowerCase(), style: m[2].trim() };
+      }
+
+      function parseInlineCloseTag(markerText) {
+        const m = /^<\/(mark|span)\s*>$/i.exec((markerText || '').trim());
+        return m ? m[1].toLowerCase() : null;
+      }
+
+      let isHydratingInlineStyles = false;
+      function hydrateInlineHtmlStyles() {
+        if (isHydratingInlineStyles) return;
+        const root = getActiveEditorElement();
+        if (!root) return;
+
+        isHydratingInlineStyles = true;
+        try {
+          const openMarkers = Array.from(root.querySelectorAll('span.vditor-ir__node[data-type="html-inline"]'));
+          openMarkers.forEach((openNode) => {
+            if (!openNode.parentNode) return;
+            const openCode = openNode.querySelector('.vditor-ir__marker');
+            const parsed = openCode ? parseInlineOpenTag(openCode.textContent) : null;
+            if (!parsed) return;
+
+            const between = [];
+            let cur = openNode.nextSibling;
+            let closeNode = null;
+            while (cur) {
+              if (cur.nodeType === 1 && cur.matches && cur.matches('span.vditor-ir__node[data-type="html-inline"]')) {
+                const closeCode = cur.querySelector('.vditor-ir__marker');
+                const closeTag = closeCode ? parseInlineCloseTag(closeCode.textContent) : null;
+                if (closeTag === parsed.tag) {
+                  closeNode = cur;
+                  break;
+                }
+              }
+              between.push(cur);
+              cur = cur.nextSibling;
+            }
+
+            if (!closeNode || between.length === 0) return;
+
+            if (between.length === 1
+              && between[0].nodeType === 1
+              && between[0].classList
+              && between[0].classList.contains('sinnote-styled-proxy')) {
+              const proxy = between[0];
+              if (proxy.getAttribute('style') !== parsed.style || proxy.getAttribute('data-tag') !== parsed.tag) {
+                proxy.setAttribute('style', parsed.style);
+                proxy.setAttribute('data-tag', parsed.tag);
+              }
+              return;
+            }
+
+            const proxy = document.createElement('span');
+            proxy.className = 'sinnote-styled-proxy';
+            proxy.setAttribute('data-tag', parsed.tag);
+            proxy.setAttribute('style', parsed.style);
+            openNode.parentNode.insertBefore(proxy, between[0]);
+            between.forEach((n) => proxy.appendChild(n));
+          });
+        } finally {
+          isHydratingInlineStyles = false;
+        }
+      }
+
+      let hydrateTimer = null;
+      function scheduleHydrateStyles() {
+        if (hydrateTimer) clearTimeout(hydrateTimer);
+        hydrateTimer = setTimeout(hydrateInlineHtmlStyles, 20);
+      }
+
+      let styleObserver = null;
+      function observeEditorInlineStyles() {
+        const root = getActiveEditorElement();
+        if (!root || styleObserver) return;
+        styleObserver = new MutationObserver(() => {
+          if (!isHydratingInlineStyles) {
+            scheduleHydrateStyles();
+          }
+        });
+        styleObserver.observe(root, { childList: true, subtree: true });
+      }
+
+      /**
+       * 从已有的 .sinnote-styled-proxy 或 <mark>/<span style="..."> 中读取已有行内样式字典，
+       * 并同时记录左右成对的 html-inline 标记节点，便于二次修改或彻底清除。
+       */
+      function extractExistingInlineStyle(node) {
+        const result = { bg: '', color: '', fontFamily: '', proxyEl: null, openMarker: null, closeMarker: null };
+        const el = node.nodeType === 3 ? node.parentElement : node;
+        if (!el || !el.closest) return result;
+
+        const proxy = el.closest('span.sinnote-styled-proxy');
+        if (proxy) {
+          result.proxyEl = proxy;
+          if (proxy.style.backgroundColor) result.bg = proxy.style.backgroundColor;
+          if (proxy.style.color) result.color = proxy.style.color;
+          if (proxy.style.fontFamily) result.fontFamily = proxy.style.fontFamily.replace(/"/g, "'");
+
+          const prev = proxy.previousSibling;
+          const next = proxy.nextSibling;
+          if (prev && prev.nodeType === 1 && prev.matches && prev.matches('span.vditor-ir__node[data-type="html-inline"]')) {
+            result.openMarker = prev;
+          }
+          if (next && next.nodeType === 1 && next.matches && next.matches('span.vditor-ir__node[data-type="html-inline"]')) {
+            result.closeMarker = next;
+          }
+          return result;
+        }
+
+        const styledEl = el.closest('mark, span[style]');
+        if (styledEl) {
+          if (styledEl.style.backgroundColor) result.bg = styledEl.style.backgroundColor;
+          if (styledEl.style.color) result.color = styledEl.style.color;
+          if (styledEl.style.fontFamily) result.fontFamily = styledEl.style.fontFamily.replace(/"/g, "'");
+        }
+        return result;
+      }
+
+      /**
+       * 安全逐文本切片应用行内样式（highlight / color / font）：
+       * - 全部通过 Lute Md2VditorIRDOM 生成标准 IR html-inline 标记 + hydrateInlineHtmlStyles 实时代理渲染；
+       * - 支持单个单元格内部分/全部文字，也支持跨多行多列单元格多选而不破坏表格结构；
+       * - 立即生效且 100% 持久化保存，切页/刷新绝不还原。
+       */
+      function applyInlineStyleToRange(targetRange, kind, val1, val2) {
+        const range = targetRange || getLiveOrSavedRange();
+        if (!range || range.collapsed) return false;
+
+        const slices = collectTextSlicesInRange(range);
+        if (slices.length === 0) return false;
+
+        slices.forEach(({ node, start, end }) => {
+          if (!node.parentNode) return;
+
+          const existing = extractExistingInlineStyle(node);
+          const fullText = node.nodeValue || '';
+          const selectedText = fullText.slice(start, end).replace(/\u200B/g, '');
+          if (!selectedText) return;
+
+          const nextStyle = {
+            'background-color': existing.bg,
+            'color': existing.color,
+            'font-family': existing.fontFamily
+          };
+
+          if (kind === 'highlight') {
+            if (!val1) {
+              nextStyle['background-color'] = '';
+              if (nextStyle['color'] === 'rgb(17, 24, 39)' || nextStyle['color'].toLowerCase() === '#111827') {
+                nextStyle['color'] = '';
+              }
+            } else {
+              nextStyle['background-color'] = val1;
+              nextStyle['color'] = val2 || pickContrastForeground(val1);
+            }
+          } else if (kind === 'color') {
+            nextStyle['color'] = val1 || '';
+          } else if (kind === 'font') {
+            nextStyle['font-family'] = val1 ? sanitizeCssStyleValue(val1) : '';
+          }
+
+          const tagName = nextStyle['background-color'] ? 'mark' : 'span';
+          const isWholeNodeSelected = start === 0 && end >= fullText.length;
+
+          // 若整个文本节点被选中且它位于一个已水合的 proxy 内，替换掉 [openMarker, proxy, closeMarker] 整组节点（避免嵌套）
+          if (isWholeNodeSelected && existing.proxyEl && existing.proxyEl.parentNode) {
+            const frag = buildVditorIrHtmlInlineFragment(tagName, nextStyle, selectedText);
+            if (frag) {
+              const parent = existing.proxyEl.parentNode;
+              if (existing.openMarker && existing.openMarker.parentNode === parent) {
+                existing.openMarker.remove();
+              }
+              if (existing.closeMarker && existing.closeMarker.parentNode === parent) {
+                existing.closeMarker.remove();
+              }
+              parent.replaceChild(frag, existing.proxyEl);
+            }
+            return;
+          }
+
+          // 若仅选中文本节点中间一段：切分出精确子文本并替换为标准 IR 节点
+          let targetNode = node;
+          if (end < targetNode.nodeValue.length) {
+            targetNode.splitText(end);
+          }
+          if (start > 0) {
+            targetNode = targetNode.splitText(start);
+          }
+
+          const frag = buildVditorIrHtmlInlineFragment(tagName, nextStyle, selectedText);
+          if (frag && targetNode.parentNode) {
+            targetNode.parentNode.replaceChild(frag, targetNode);
+          }
+        });
+
+        // 立刻水合成对 html-inline 节点，让高亮、字体颜色与局部字体肉眼即刻呈现
+        hydrateInlineHtmlStyles();
+
+        const sel = window.getSelection();
+        if (sel) sel.removeAllRanges();
+        savedSelectionRange = null;
+        savedFontSelectionRange = null;
+        clearTableCellSelection();
+        recordUndoSnapshot();
+        emitContentChangedImmediate();
+        hideSelectionBar();
+        return true;
+      }
+
+      function applyHighlightToSelection(bgHex, fgHex) {
+        applyInlineStyleToRange(null, 'highlight', bgHex, fgHex);
+      }
+
+      function applyTextColorToSelection(hex) {
+        applyInlineStyleToRange(null, 'color', hex, null);
+      }
+
+      function applyFontFamilyToSelection(cssFont, rangeOverride) {
+        applyInlineStyleToRange(rangeOverride, 'font', cssFont, null);
+      }
+
+      function openSelectionPalette(kind, anchorEl) {
+        if (!selectionPalette || !selPaletteGrid) return;
+        if (!selectionPalette.hidden && activePaletteKind === kind) {
+          selectionPalette.hidden = true;
+          activePaletteKind = null;
+          return;
+        }
+
+        activePaletteKind = kind;
+        selPaletteTitle.textContent = kind === 'highlight' ? '文本突出显示颜色（高亮）' : '字体颜色';
+        selPaletteGrid.innerHTML = '';
+
+        if (kind === 'highlight') {
+          HIGHLIGHT_COLOR_PRESETS.forEach((p) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'sinnote-swatch-btn';
+            btn.style.backgroundColor = p.bg;
+            btn.title = p.name;
+            btn.addEventListener('mousedown', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              currentHighlight = p;
+              if (selHlBar) selHlBar.style.backgroundColor = p.bg;
+              applyHighlightToSelection(p.bg, p.fg);
+            });
+            selPaletteGrid.appendChild(btn);
+          });
+        } else {
+          TEXT_COLOR_PRESETS.forEach((p) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'sinnote-swatch-btn';
+            btn.style.backgroundColor = p.hex;
+            btn.title = p.name;
+            btn.addEventListener('mousedown', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              currentTextColor = p.hex;
+              if (selFgBar) selFgBar.style.backgroundColor = p.hex;
+              applyTextColorToSelection(p.hex);
+            });
+            selPaletteGrid.appendChild(btn);
+          });
+        }
+
+        positionPopoverUnder(selectionPalette, anchorEl);
+      }
+
+      function updateSelectionBar() {
+        if (!selectionBar || !vditor || !vditor.vditor) return;
+        if ((vditor.vditor.currentMode || 'ir') === 'sv') {
+          hideSelectionBar();
+          return;
+        }
+
+        const root = getActiveEditorElement();
+        const sel = window.getSelection();
+        if (!root || !sel || sel.rangeCount === 0 || sel.isCollapsed) {
+          if (selectionPalette && !selectionPalette.hidden) return;
+          hideSelectionBar();
+          return;
+        }
+
+        const text = sel.toString();
+        if (!text || !text.trim()) {
+          hideSelectionBar();
+          return;
+        }
+
+        const range = sel.getRangeAt(0);
+        let anc = range.commonAncestorContainer;
+        if (anc.nodeType === 3) anc = anc.parentElement;
+        if (!anc || !root.contains(anc)) {
+          hideSelectionBar();
+          return;
+        }
+
+        // 代码块内部不弹高亮颜色浮条
+        if (anc.closest && anc.closest('pre.vditor-ir__marker--pre, code.hljs, .vditor-ir__node[data-type="code-block"]')) {
+          hideSelectionBar();
+          return;
+        }
+
+        savedSelectionRange = range.cloneRange();
+        const rect = range.getBoundingClientRect();
+        if (!rect || (rect.width === 0 && rect.height === 0)) {
+          hideSelectionBar();
+          return;
+        }
+
+        selectionBar.hidden = false;
+        const barRect = selectionBar.getBoundingClientRect();
+        const tbEl = document.querySelector('.vditor-toolbar');
+        const tblBarBottom = (tableBar && !tableBar.hidden) ? tableBar.getBoundingClientRect().bottom : 0;
+        const minTop = Math.max(tbEl ? tbEl.getBoundingClientRect().bottom + 4 : 6, tblBarBottom + 4);
+
+        let top = rect.top - barRect.height - 8;
+        let left = rect.left + (rect.width - barRect.width) / 2;
+        const maxLeft = Math.max(8, window.innerWidth - barRect.width - 12);
+        left = Math.min(Math.max(8, left), maxLeft);
+
+        if (top < minTop) {
+          top = Math.min(window.innerHeight - barRect.height - 10, rect.bottom + 8);
+        }
+
+        selectionBar.style.top = Math.round(top) + 'px';
+        selectionBar.style.left = Math.round(left) + 'px';
+      }
+
+      let selBarTimer = null;
+      function updateSelectionBarSoon() {
+        if (selBarTimer) clearTimeout(selBarTimer);
+        selBarTimer = setTimeout(updateSelectionBar, 35);
+      }
+
+      function bindSelectionToolbar() {
+        if (!selectionBar) return;
+
+        selectionBar.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+
+        if (selectionPalette) {
+          selectionPalette.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          });
+        }
+
+        if (selHlApply) {
+          selHlApply.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            applyHighlightToSelection(currentHighlight.bg, currentHighlight.fg);
+          });
+        }
+
+        if (selHlMenu) {
+          selHlMenu.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openSelectionPalette('highlight', selHlApply);
+          });
+        }
+
+        if (selFgApply) {
+          selFgApply.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            applyTextColorToSelection(currentTextColor);
+          });
+        }
+
+        if (selFgMenu) {
+          selFgMenu.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openSelectionPalette('color', selFgApply);
+          });
+        }
+
+        if (selPaletteClear) {
+          selPaletteClear.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (activePaletteKind === 'highlight') {
+              applyHighlightToSelection(null, null);
+            } else {
+              applyTextColorToSelection(null);
+            }
+          });
+        }
+
+        selectionBar.querySelectorAll('button[data-align]').forEach((btn) => {
+          btn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            applyTextAlignment(btn.getAttribute('data-align'));
+            hideSelectionBar();
+          });
+        });
+
+        document.addEventListener('selectionchange', updateSelectionBarSoon);
+        document.addEventListener('mouseup', updateSelectionBarSoon);
+        document.addEventListener('keyup', updateSelectionBarSoon);
+      }
+    })();
+  </script>
+</body>
+</html>

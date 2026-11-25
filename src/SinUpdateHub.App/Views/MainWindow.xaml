@@ -1,0 +1,164 @@
+<Window x:Class="SinUpdateHub.App.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:views="clr-namespace:SinUpdateHub.App.Views"
+        mc:Ignorable="d"
+        Title="SinUpdateHub 软件更新管理器"
+        Width="1420"
+        Height="840"
+        MinWidth="1120"
+        MinHeight="640"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BrushBg0}"
+        Style="{StaticResource WindowBaseStyle}">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            CornerRadius="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Grid Background="{StaticResource BrushBg0}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="44" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ==================== Row0：自制标题栏（44） ==================== -->
+        <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Margin="16,0,0,0">
+                <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource BrushAccentGradient}">
+                    <TextBlock Text="S"
+                               FontSize="15"
+                               FontWeight="Bold"
+                               Foreground="#FFFFFF"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Text="SinUpdateHub"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource BrushText}"
+                           VerticalAlignment="Center"
+                           Margin="10,0,0,0" />
+                <TextBlock Text="软件更新管理器"
+                           FontSize="11"
+                           Foreground="{StaticResource BrushTextMuted}"
+                           VerticalAlignment="Center"
+                           Margin="8,0,0,0" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,8,0">
+                <Button Style="{StaticResource TitleBarButton}"
+                        Content="&#xE921;"
+                        ToolTip="最小化"
+                        AutomationProperties.Name="最小化"
+                        Click="BtnMinimize_Click" />
+                <Button Style="{StaticResource TitleBarButton}"
+                        Content="&#xE922;"
+                        ToolTip="最大化 / 还原"
+                        AutomationProperties.Name="最大化 / 还原"
+                        Click="BtnMaximize_Click" />
+                <Button Style="{StaticResource CloseTitleBarButton}"
+                        Content="&#xE711;"
+                        ToolTip="关闭"
+                        AutomationProperties.Name="关闭"
+                        Click="BtnClose_Click" />
+            </StackPanel>
+        </Grid>
+
+        <!-- ==================== Row1：左侧导航 + 右侧页面区 ==================== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 侧边导航（背景 BrushBg1，右侧 1px 分隔线） -->
+            <Border Grid.Column="0"
+                    Background="{StaticResource BrushBg1}"
+                    BorderBrush="{StaticResource BrushBorder}"
+                    BorderThickness="0,0,1,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 顶部留 8px 后是导航项 -->
+                    <ItemsControl Grid.Row="0"
+                                  Margin="0,8,0,0"
+                                  ItemsSource="{Binding NavItems}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource SidebarNavButton}"
+                                        Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding Label}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Glyph}"
+                                                   FontFamily="{StaticResource FontFamilyIcon}"
+                                                   FontSize="15"
+                                                   Width="22"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Label}"
+                                                   FontSize="13"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- 底部版本信息 -->
+                    <StackPanel Grid.Row="2" Margin="18,0,18,16">
+                        <TextBlock Text="v1.0.0"
+                                   FontSize="11"
+                                   Foreground="{StaticResource BrushTextMuted}" />
+                        <TextBlock Text="GitHub · WinGet"
+                                   FontSize="11"
+                                   Foreground="{StaticResource BrushTextMuted}"
+                                   Margin="0,3,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 右侧页面区：四个内嵌页面叠放，用 Visibility 切换 -->
+            <Grid Grid.Column="1">
+                <!-- 软件列表 / 官网列表（DataContext = MainViewModel） -->
+                <Grid Visibility="{Binding IsListPage, Converter={StaticResource BoolToVis}}">
+                    <views:AppListView />
+                </Grid>
+
+                <!-- SinNote 笔记与表格（DataContext = NotesViewModel） -->
+                <Grid Visibility="{Binding IsNotesPage, Converter={StaticResource BoolToVis}}">
+                    <views:NotesView x:Name="NotesPageView" DataContext="{Binding NotesPage}" />
+                </Grid>
+
+                <!-- 备份与恢复（DataContext = BackupViewModel，Visibility 绑定写在外层） -->
+                <Grid Visibility="{Binding IsBackupPage, Converter={StaticResource BoolToVis}}">
+                    <views:BackupView DataContext="{Binding BackupPage}" />
+                </Grid>
+
+                <!-- 设置（DataContext = SettingsViewModel，Visibility 绑定写在外层） -->
+                <Grid Visibility="{Binding IsSettingsPage, Converter={StaticResource BoolToVis}}">
+                    <views:SettingsView DataContext="{Binding SettingsPage}" />
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

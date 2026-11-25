@@ -1,0 +1,392 @@
+<Window x:Class="SinUpdateHub.App.Views.EntryEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        mc:Ignorable="d"
+        Title="添加软件"
+        Width="760"
+        Height="820"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource BrushBg0}"
+        Style="{StaticResource WindowBaseStyle}">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            CornerRadius="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Grid Background="{StaticResource BrushBg0}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="44" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- 标题栏 -->
+        <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Margin="16,0,0,0">
+                <Border Width="22" Height="22" CornerRadius="6" Background="{StaticResource BrushAccentGradient}">
+                    <TextBlock Text="S"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="#FFFFFF"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Text="{Binding Title}"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource BrushText}"
+                           VerticalAlignment="Center"
+                           Margin="10,0,0,0" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,8,0">
+                <Button Style="{StaticResource TitleBarButton}"
+                        Content="&#xE921;"
+                        ToolTip="最小化"
+                        Click="BtnMinimize_Click" />
+                <Button Style="{StaticResource CloseTitleBarButton}"
+                        Content="&#xE711;"
+                        ToolTip="关闭"
+                        Click="BtnClose_Click" />
+            </StackPanel>
+        </Grid>
+
+        <!-- 内容 -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Padding="24,10,24,12">
+            <StackPanel>
+
+                <!-- 来源选择 -->
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton Style="{StaticResource InputRadio}"
+                                 GroupName="src"
+                                 Content="GitHub 来源"
+                                 IsChecked="{Binding IsGitHub, Mode=TwoWay}" AutomationProperties.Name="GitHub 来源"
+                                 Margin="0,0,26,0" />
+                    <RadioButton Style="{StaticResource InputRadio}"
+                                 GroupName="src"
+                                 Content="WinGet 来源"
+                                 IsChecked="{Binding IsWinGet, Mode=TwoWay}"  AutomationProperties.Name="WinGet 来源"
+                                 Margin="0,0,26,0" />
+                    <RadioButton Style="{StaticResource InputRadio}"
+                                 GroupName="src"
+                                 Content="官网/手动"
+                                 IsChecked="{Binding IsCustom, Mode=TwoWay}" AutomationProperties.Name="官网/手动来源" />
+                </StackPanel>
+                <TextBlock Style="{StaticResource FieldHint}"
+                           Text="{Binding SourceHint}"
+                           TextWrapping="Wrap"
+                           Margin="0,7,0,0" />
+
+                <!-- 项目名称 -->
+                <StackPanel Margin="0,16,0,0">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="项目名称" />
+                    <TextBox Style="{StaticResource InputBox}"
+                             Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Style="{StaticResource FieldHint}" Text="如 FreeType、UU 远程" />
+                </StackPanel>
+
+                <!-- 显示名称 -->
+                <StackPanel Margin="0,16,0,0">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="显示名称（可选）" />
+                    <TextBox Style="{StaticResource InputBox}"
+                             Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="显示名称" />
+                    <TextBlock Style="{StaticResource FieldHint}" Text="列表中展示的名字；不填默认同项目名称（项目名称用于自动识别匹配本机软件）" />
+                </StackPanel>
+
+                <!-- GitHub 仓库 -->
+                <StackPanel Margin="0,16,0,0"
+                            Visibility="{Binding IsGitHub, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="仓库地址" />
+                    <TextBox Style="{StaticResource InputBox}"
+                             Text="{Binding RepoUrl, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Style="{StaticResource FieldHint}"
+                               Text="https://github.com/owner/repo，也可只填 owner/repo" />
+                </StackPanel>
+
+                <!-- 官网/手动来源：官网下载页 -->
+                <StackPanel Margin="0,16,0,0"
+                            Visibility="{Binding IsCustom, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="官网下载页" />
+                    <TextBox Style="{StaticResource InputBox}"
+                             Text="{Binding HomepageUrl, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="官网下载页" />
+                    <TextBlock Style="{StaticResource FieldHint}"
+                               Text="例如 https://www.nvidia.cn/geforce/broadcasting/broadcast-app/ ；检查时只刷新本机当前版本，「更新」会打开这个页面" />
+                </StackPanel>
+
+                <!-- 包 / 包 ID（WinGet 来源支持按名称搜索包 ID） -->
+                <StackPanel Margin="0,16,0,0"
+                            Visibility="{Binding ShowPackageSection, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding PackageLabel}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Style="{StaticResource InputBox}"
+                                 Text="{Binding Package, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="1"
+                                Style="{StaticResource GhostButton}"
+                                Height="34"
+                                MinHeight="34"
+                                Margin="8,0,0,0"
+                                Command="{Binding SearchPackageCommand}"
+                                Visibility="{Binding ShowPackageSearch, Converter={StaticResource BoolToVis}}"
+                                AutomationProperties.Name="搜索包 ID">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource ButtonGlyph}" Text="&#xE721;" />
+                                <TextBlock Text="搜索包 ID" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <TextBlock FontSize="11"
+                               Foreground="{StaticResource BrushAccent}"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,5,0,0"
+                               Visibility="{Binding HasPackageDisplayName, Converter={StaticResource BoolToVis}}">
+                        <Run Text="已选包：" /><Run Text="{Binding PackageDisplayName, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock Style="{StaticResource FieldHint}" Text="{Binding PackageHint}" />
+                    <CheckBox Style="{StaticResource InputCheck}"
+                              Content="正则匹配"
+                              IsChecked="{Binding PackageIsRegex}"
+                              Margin="0,10,0,0"
+                              Visibility="{Binding ShowRegexOption, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
+
+                <!-- 安装目录 -->
+                <StackPanel Margin="0,16,0,0">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="安装目录" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Style="{StaticResource InputBox}"
+                                 Text="{Binding InstallDir, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="1"
+                                Style="{StaticResource SecondaryButton}"
+                                Height="34"
+                                MinHeight="34"
+                                Margin="8,0,0,0"
+                                Command="{Binding BrowseInstallExeCommand}"
+                                AutomationProperties.Name="选择 EXE"
+                                ToolTip="选择软件主程序 exe，会自动填好安装目录并读取文件版本">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource ButtonGlyph}" Text="&#xE7B8;" />
+                                <TextBlock Text="选 EXE" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <TextBlock Style="{StaticResource FieldHint}" Text="点「选 EXE」挑主程序会自动填目录；保存时若目录不存在会自动创建。" />
+                    <Grid Margin="0,4,0,0"
+                          Visibility="{Binding HasExePath, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding ExePathText}"
+                                   FontSize="11"
+                                   Foreground="{StaticResource BrushAccent}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding ExePath}"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Style="{StaticResource GhostButton}"
+                                Height="24"
+                                MinHeight="24"
+                                Padding="8,0"
+                                Content="解除绑定"
+                                FontSize="11"
+                                Command="{Binding ClearExePathCommand}"
+                                AutomationProperties.Name="解除绑定" />
+                    </Grid>
+                    <TextBlock Style="{StaticResource FieldHint}" Text="{Binding DetectHint}" Margin="0,2,0,0" />
+                </StackPanel>
+
+                <!-- 当前版本 -->
+                <StackPanel Margin="0,16,0,0">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="当前版本（安装电脑的版本）" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Style="{StaticResource InputBox}"
+                                 Text="{Binding CurrentVersion, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="1"
+                                Style="{StaticResource PrimaryButton}"
+                                Height="34"
+                                MinHeight="34"
+                                Margin="8,0,0,0"
+                                Command="{Binding AutoDetectCommand}" AutomationProperties.Name="自动识别">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource ButtonGlyph}" Text="&#xE721;" />
+                                <TextBlock Text="自动识别" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <TextBlock Style="{StaticResource FieldHint}" Text="安装目录有 EXE 版本时直接显示该版本；目录为空或 EXE 无版本号时可点「自动识别」。" />
+                </StackPanel>
+
+                <!-- 自动识别候选 -->
+                <Border Style="{StaticResource CardBorder}"
+                        Padding="8"
+                        Margin="0,12,0,0"
+                        Visibility="{Binding HasCandidates, Converter={StaticResource BoolToVis}}">
+                    <ScrollViewer MaxHeight="180"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding Candidates}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource GhostButton}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Left"
+                                            Padding="10,7"
+                                            Margin="0,2"
+                                            Command="{Binding DataContext.ApplyCandidateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}">
+                                        <TextBlock Text="{Binding Summary}"
+                                                   FontSize="12"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Summary}" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- 安装参数 -->
+                <StackPanel Margin="0,16,0,0">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="安装参数（可选）" />
+                    <TextBox Style="{StaticResource InputBox}"
+                             Text="{Binding InstallArgs, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Style="{StaticResource FieldHint}"
+                               Text="/S、/SILENT、/quiet 等，留空则按安装器默认界面来" />
+                </StackPanel>
+
+                <!-- 备注 -->
+                <StackPanel Margin="0,16,0,0">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="备注（可选）" />
+                    <TextBox Style="{StaticResource InputBox}"
+                             Height="60"
+                             MinHeight="60"
+                             Padding="10,8"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             VerticalContentAlignment="Top"
+                             VerticalScrollBarVisibility="Auto"
+                             Text="{Binding Remark, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <!-- 测试检查按钮已移到窗口底部固定操作条，滚动时也一直可见 -->
+
+                <!-- 测试结果 -->
+                <Border Style="{StaticResource CardBorder}"
+                        Padding="14"
+                        Margin="0,10,0,0"
+                        Visibility="{Binding HasTestResult, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <TextBlock FontSize="12" Foreground="{StaticResource BrushTextSecondary}">
+                            <Run Text="最新版本：" /><Run Text="{Binding TestLatest, Mode=OneWay}" Foreground="{StaticResource BrushAccent}" FontWeight="SemiBold" />
+                        </TextBlock>
+                        <TextBlock FontSize="12"
+                                   Foreground="{StaticResource BrushTextSecondary}"
+                                   Margin="0,5,0,0"
+                                   TextWrapping="Wrap">
+                            <Run Text="匹配安装包：" /><Run Text="{Binding TestAsset, Mode=OneWay}" Foreground="{StaticResource BrushText}" />
+                        </TextBlock>
+                        <TextBlock FontSize="12"
+                                   Foreground="{StaticResource BrushTextSecondary}"
+                                   Margin="0,5,0,0"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding TestAdvisory, Converter={StaticResource NullToVis}}">
+                            <Run Text="提示：" /><Run Text="{Binding TestAdvisory, Mode=OneWay}" Foreground="{StaticResource BrushWarn}" />
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <!-- 状态信息已移到窗口底部固定操作条 -->
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 底部按钮区（固定，不随内容滚动）：测试检查 / 状态 / 保存取消 -->
+        <Border Grid.Row="2"
+                Background="{StaticResource BrushBg0}"
+                BorderBrush="{StaticResource BrushBorder}"
+                BorderThickness="0,1,0,0"
+                Padding="24,12,24,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0"
+                        Style="{StaticResource SecondaryButton}"
+                        Command="{Binding TestCheckCommand}" AutomationProperties.Name="测试检查"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource ButtonGlyph}" Text="&#xE895;" />
+                        <TextBlock Text="测试检查" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <TextBlock Grid.Column="1"
+                           Text="{Binding StatusMessage}"
+                           FontSize="12"
+                           Foreground="{StaticResource BrushInfo}"
+                           TextTrimming="CharacterEllipsis"
+                           TextWrapping="NoWrap"
+                           VerticalAlignment="Center"
+                           Margin="14,0,14,0"
+                           Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}" />
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Button Style="{StaticResource PrimaryButton}"
+                            MinWidth="96"
+                            Command="{Binding SaveCommand}" AutomationProperties.Name="保存">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource ButtonGlyph}" Text="&#xE74E;" />
+                            <TextBlock Text="保存" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource SecondaryButton}"
+                            MinWidth="96"
+                            Command="{Binding CancelCommand}" AutomationProperties.Name="取消"
+                            Margin="10,0,0,0">
+                        <TextBlock Text="取消" VerticalAlignment="Center" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

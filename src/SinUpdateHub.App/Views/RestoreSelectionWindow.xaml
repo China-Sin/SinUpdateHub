@@ -1,0 +1,479 @@
+<Window x:Class="SinUpdateHub.App.Views.RestoreSelectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        mc:Ignorable="d"
+        Title="选择要恢复的数据"
+        Width="820"
+        Height="640"
+        MinWidth="720"
+        MinHeight="520"
+        ResizeMode="CanResizeWithGrip"
+        WindowStyle="None"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource BrushBg0}"
+        Style="{StaticResource WindowBaseStyle}">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            CornerRadius="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Border BorderBrush="{StaticResource BrushBorderStrong}" BorderThickness="1">
+        <Grid Background="{StaticResource BrushBg0}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="44" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- 标题栏 -->
+            <Grid Grid.Row="0" Background="{StaticResource BrushBg1}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Margin="16,0,0,0">
+                    <Border Width="22" Height="22" CornerRadius="6" Background="{StaticResource BrushAccentGradient}">
+                        <TextBlock Text="S"
+                                   FontSize="12"
+                                   FontWeight="Bold"
+                                   Foreground="#FFFFFF"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="选择要恢复的数据"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource BrushText}"
+                               VerticalAlignment="Center"
+                               Margin="10,0,0,0" />
+                    <TextBlock Text="{Binding SourceDisplay}"
+                               FontSize="11.5"
+                               Foreground="{StaticResource BrushTextMuted}"
+                               VerticalAlignment="Center"
+                               Margin="10,0,0,0"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="420" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,8,0">
+                    <Button Style="{StaticResource CloseTitleBarButton}"
+                            Content="&#xE711;"
+                            ToolTip="关闭"
+                            Click="BtnCancel_Click" />
+                </StackPanel>
+            </Grid>
+
+            <!-- 顶部说明 + 全局快捷勾选 -->
+            <Border Grid.Row="1"
+                    Background="{StaticResource BrushBg0}"
+                    BorderBrush="{StaticResource BrushBorder}"
+                    BorderThickness="0,1,0,1"
+                    Padding="20,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding SourceSummaryText}"
+                                   FontSize="12.5"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource BrushText}" />
+                        <TextBlock Text="可勾选全部或单独勾选需要恢复的软件条目与 SinNote 笔记页"
+                                   FontSize="11.5"
+                                   Foreground="{StaticResource BrushTextMuted}"
+                                   Margin="0,3,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource SecondaryButton}"
+                                Height="28"
+                                MinHeight="28"
+                                Padding="10,0"
+                                FontSize="12"
+                                Content="全选"
+                                Command="{Binding SelectAllCommand}"
+                                AutomationProperties.Name="全选恢复项" />
+                        <Button Style="{StaticResource GhostButton}"
+                                Height="28"
+                                MinHeight="28"
+                                Padding="10,0"
+                                Margin="6,0,0,0"
+                                FontSize="12"
+                                Content="全不选"
+                                Command="{Binding ClearAllCommand}"
+                                AutomationProperties.Name="全不选恢复项" />
+                        <Button Style="{StaticResource GhostButton}"
+                                Height="28"
+                                MinHeight="28"
+                                Padding="10,0"
+                                Margin="6,0,0,0"
+                                FontSize="12"
+                                Content="仅选软件"
+                                Command="{Binding SelectSoftwareOnlyCommand}"
+                                AutomationProperties.Name="仅选软件" />
+                        <Button Style="{StaticResource GhostButton}"
+                                Height="28"
+                                MinHeight="28"
+                                Padding="10,0"
+                                Margin="6,0,0,0"
+                                FontSize="12"
+                                Content="仅选笔记"
+                                Command="{Binding SelectNotesOnlyCommand}"
+                                AutomationProperties.Name="仅选笔记" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 主体：左栏软件列表/软件下载 + 右栏 SinNote 分区与页面 -->
+            <Grid Grid.Row="2" Margin="20,14,20,14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="14" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 左栏：软件条目 -->
+                <Border Grid.Column="0"
+                        Background="{StaticResource BrushBg1}"
+                        BorderBrush="{StaticResource BrushBorder}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="14">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <TextBlock Text="{Binding SoftwareHeaderText}"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource BrushText}"
+                                       VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Style="{StaticResource GhostButton}"
+                                        Height="24"
+                                        MinHeight="24"
+                                        Padding="8,0"
+                                        FontSize="11"
+                                        Content="全选"
+                                        Command="{Binding SelectAllSoftwareCommand}" />
+                                <Button Style="{StaticResource GhostButton}"
+                                        Height="24"
+                                        MinHeight="24"
+                                        Padding="8,0"
+                                        Margin="4,0,0,0"
+                                        FontSize="11"
+                                        Content="清空"
+                                        Command="{Binding ClearAllSoftwareCommand}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- 轻量搜索过滤 -->
+                        <Border Grid.Row="1"
+                                Background="{StaticResource BrushBg0}"
+                                BorderBrush="{StaticResource BrushBorder}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Height="30"
+                                Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="&#xE721;"
+                                           FontFamily="{StaticResource FontFamilyIcon}"
+                                           FontSize="11"
+                                           Foreground="{StaticResource BrushTextMuted}"
+                                           VerticalAlignment="Center"
+                                           Margin="9,0,6,0" />
+                                <Grid Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBox Background="Transparent"
+                                             Foreground="{StaticResource BrushText}"
+                                             CaretBrush="{StaticResource BrushText}"
+                                             BorderThickness="0"
+                                             Padding="0,0,8,0"
+                                             FontSize="12"
+                                             VerticalContentAlignment="Center"
+                                             Text="{Binding SoftwareFilterText, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="筛选要恢复的软件" />
+                                    <TextBlock Text="按名称或来源筛选软件…"
+                                               FontSize="11.5"
+                                               Foreground="{StaticResource BrushTextMuted}"
+                                               VerticalAlignment="Center"
+                                               IsHitTestVisible="False"
+                                               Visibility="{Binding SoftwareFilterText, Converter={StaticResource NullToVis}, ConverterParameter=invert}" />
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <ScrollViewer Grid.Row="2"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <TextBlock Text="此备份不包含任何软件条目"
+                                           FontSize="12"
+                                           Foreground="{StaticResource BrushTextMuted}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,28,0,0"
+                                           Visibility="{Binding HasNoSoftware, Converter={StaticResource BoolToVis}}" />
+
+                                <ItemsControl ItemsSource="{Binding FilteredSoftwareItems}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource BrushBg0}"
+                                                    BorderBrush="{StaticResource BrushBorder}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="6"
+                                                    Padding="10,7"
+                                                    Margin="0,0,0,6">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <CheckBox Grid.Column="0"
+                                                              Style="{StaticResource InputCheck}"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              VerticalAlignment="Center">
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding DisplayName}"
+                                                                       FontSize="12.5"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{StaticResource BrushText}"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding DetailText}"
+                                                                       FontSize="11"
+                                                                       Foreground="{StaticResource BrushTextMuted}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Margin="0,2,0,0" />
+                                                        </StackPanel>
+                                                    </CheckBox>
+
+                                                    <Border Grid.Column="1"
+                                                            VerticalAlignment="Center"
+                                                            CornerRadius="4"
+                                                            Padding="6,2"
+                                                            Margin="8,0,0,0"
+                                                            BorderThickness="1"
+                                                            BorderBrush="{Binding Source, Converter={StaticResource SourceToBrush}}">
+                                                        <TextBlock Text="{Binding SourceText}"
+                                                                   FontSize="10.5"
+                                                                   Foreground="{Binding Source, Converter={StaticResource SourceToBrush}}" />
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- 右栏：SinNote 分区与页面 -->
+                <Border Grid.Column="2"
+                        Background="{StaticResource BrushBg1}"
+                        BorderBrush="{StaticResource BrushBorder}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="14">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <TextBlock Text="{Binding NotesHeaderText}"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource BrushText}"
+                                       VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Style="{StaticResource GhostButton}"
+                                        Height="24"
+                                        MinHeight="24"
+                                        Padding="8,0"
+                                        FontSize="11"
+                                        Content="全选"
+                                        Command="{Binding SelectAllNotesCommand}" />
+                                <Button Style="{StaticResource GhostButton}"
+                                        Height="24"
+                                        MinHeight="24"
+                                        Padding="8,0"
+                                        Margin="4,0,0,0"
+                                        FontSize="11"
+                                        Content="清空"
+                                        Command="{Binding ClearAllNotesCommand}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="1"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <TextBlock Text="此备份不包含任何 SinNote 笔记页"
+                                           FontSize="12"
+                                           Foreground="{StaticResource BrushTextMuted}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,28,0,0"
+                                           Visibility="{Binding HasNoNotes, Converter={StaticResource BoolToVis}}" />
+
+                                <ItemsControl ItemsSource="{Binding NoteSectionGroups}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource BrushBg0}"
+                                                    BorderBrush="{StaticResource BrushBorder}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="8"
+                                                    Padding="10,8"
+                                                    Margin="0,0,0,8">
+                                                <StackPanel>
+                                                    <!-- 分区头部（勾选可全选/取消本分区下所有页） -->
+                                                    <Grid Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <Border Grid.Column="0"
+                                                                Width="4"
+                                                                Height="16"
+                                                                CornerRadius="2"
+                                                                Background="{Binding ColorHex, Converter={StaticResource HexToBrush}}"
+                                                                VerticalAlignment="Center"
+                                                                Margin="0,0,8,0" />
+
+                                                        <CheckBox Grid.Column="1"
+                                                                  Style="{StaticResource InputCheck}"
+                                                                  IsThreeState="False"
+                                                                  IsChecked="{Binding IsAllPagesSelected, Mode=TwoWay}"
+                                                                  VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding SectionName}"
+                                                                       FontSize="12.5"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{StaticResource BrushText}" />
+                                                        </CheckBox>
+
+                                                        <TextBlock Grid.Column="2"
+                                                                   Text="{Binding SelectionCountText}"
+                                                                   FontSize="11"
+                                                                   Foreground="{StaticResource BrushTextMuted}"
+                                                                   VerticalAlignment="Center" />
+                                                    </Grid>
+
+                                                    <!-- 分区内各页单选 -->
+                                                    <ItemsControl ItemsSource="{Binding Pages}" Margin="16,0,0,0">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Grid Margin="0,3,0,3">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <CheckBox Grid.Column="0"
+                                                                              Style="{StaticResource InputCheck}"
+                                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                              VerticalAlignment="Center">
+                                                                        <TextBlock Text="{Binding PageTitle}"
+                                                                                   FontSize="12"
+                                                                                   Foreground="{StaticResource BrushTextSecondary}"
+                                                                                   TextTrimming="CharacterEllipsis" />
+                                                                    </CheckBox>
+                                                                    <TextBlock Grid.Column="1"
+                                                                               Text="{Binding UpdatedText}"
+                                                                               FontSize="10.5"
+                                                                               Foreground="{StaticResource BrushTextMuted}"
+                                                                               VerticalAlignment="Center"
+                                                                               Margin="8,0,0,0" />
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- 底部：恢复模式 + 已选统计 + 确认/取消 -->
+            <Border Grid.Row="3"
+                    Background="{StaticResource BrushBg1}"
+                    BorderBrush="{StaticResource BrushBorder}"
+                    BorderThickness="0,1,0,0"
+                    Padding="20,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton GroupName="RestoreModeGroup"
+                                         Content="合并恢复（保留未勾选的现有数据）"
+                                         IsChecked="{Binding IsMergeMode, Mode=TwoWay}"
+                                         Foreground="{StaticResource BrushText}"
+                                         FontSize="12"
+                                         Margin="0,0,16,0"
+                                         VerticalContentAlignment="Center" />
+                            <RadioButton GroupName="RestoreModeGroup"
+                                         Content="完全覆盖（仅保留本次勾选项）"
+                                         IsChecked="{Binding IsReplaceMode, Mode=TwoWay}"
+                                         Foreground="{StaticResource BrushTextSecondary}"
+                                         FontSize="12"
+                                         VerticalContentAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding SelectionSummaryText}"
+                                   FontSize="11.5"
+                                   Foreground="{StaticResource BrushInfo}"
+                                   Margin="0,5,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource SecondaryButton}"
+                                Height="34"
+                                MinHeight="34"
+                                Padding="16,0"
+                                Content="取消"
+                                Click="BtnCancel_Click" />
+                        <Button Style="{StaticResource PrimaryButton}"
+                                Height="34"
+                                MinHeight="34"
+                                Padding="18,0"
+                                Margin="10,0,0,0"
+                                Content="恢复所选数据"
+                                IsEnabled="{Binding CanConfirm}"
+                                Click="BtnConfirm_Click"
+                                AutomationProperties.Name="确认恢复所选数据" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

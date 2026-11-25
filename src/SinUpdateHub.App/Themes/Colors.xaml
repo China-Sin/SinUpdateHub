@@ -1,0 +1,77 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        SinUpdateHub 调色板：GitHub 黑 + 紫灰。
+        所有颜色只在这里定义，Styles.xaml 与各窗口一律引用这些键。
+        键名被需求文档固定，不要改名。
+    -->
+
+    <!-- ========== 背景层次 ========== -->
+    <SolidColorBrush x:Key="BrushBg0" Color="#0D1117" />
+    <SolidColorBrush x:Key="BrushBg1" Color="#161B22" />
+    <SolidColorBrush x:Key="BrushBg2" Color="#1C2128" />
+    <SolidColorBrush x:Key="BrushBg3" Color="#21262D" />
+    <SolidColorBrush x:Key="BrushWindowGlass" Color="#0B0E14" />
+    <SolidColorBrush x:Key="BrushTransparent" Color="Transparent" />
+
+    <!-- ========== 边框 ========== -->
+    <SolidColorBrush x:Key="BrushBorder" Color="#30363D" />
+    <SolidColorBrush x:Key="BrushBorderStrong" Color="#3D444D" />
+
+    <!-- ========== 文字 ========== -->
+    <SolidColorBrush x:Key="BrushText" Color="#E6EDF3" />
+    <SolidColorBrush x:Key="BrushTextSecondary" Color="#8B949E" />
+    <SolidColorBrush x:Key="BrushTextMuted" Color="#6E7681" />
+
+    <!-- ========== 主色（紫） ========== -->
+    <SolidColorBrush x:Key="BrushAccent" Color="#A371F7" />
+    <SolidColorBrush x:Key="BrushAccentHover" Color="#B98CFF" />
+    <SolidColorBrush x:Key="BrushAccentPressed" Color="#8957E5" />
+    <SolidColorBrush x:Key="BrushAccentSoft" Color="#2B1B45" />
+    <SolidColorBrush x:Key="BrushAccentSoftHover" Color="#3A2560" />
+    <SolidColorBrush x:Key="BrushAccentGlow" Color="#40A371F7" />
+
+    <!-- ========== 语义色 ========== -->
+    <SolidColorBrush x:Key="BrushSuccess" Color="#3FB950" />
+    <SolidColorBrush x:Key="BrushDanger" Color="#F85149" />
+    <SolidColorBrush x:Key="BrushWarn" Color="#D29922" />
+    <SolidColorBrush x:Key="BrushInfo" Color="#58A6FF" />
+
+    <!-- 语义色淡底（统计卡片图标底、hover 用） -->
+    <SolidColorBrush x:Key="BrushSuccessSoft" Color="#1B2F22" />
+    <SolidColorBrush x:Key="BrushDangerSoft" Color="#33191B" />
+    <SolidColorBrush x:Key="BrushWarnSoft" Color="#332915" />
+    <SolidColorBrush x:Key="BrushInfoSoft" Color="#14263D" />
+
+    <!-- ========== 滚动条 ========== -->
+    <SolidColorBrush x:Key="BrushScrollThumb" Color="#30363D" />
+    <SolidColorBrush x:Key="BrushScrollThumbHover" Color="#484F59" />
+
+    <!-- ========== 渐变 ========== -->
+    <!-- logo / 标题强调 -->
+    <LinearGradientBrush x:Key="BrushAccentGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#C297FF" Offset="0" />
+        <GradientStop Color="#A371F7" Offset="0.45" />
+        <GradientStop Color="#6E40C9" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- 不定进度条的流动光带 -->
+    <LinearGradientBrush x:Key="BrushGlowGradient" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#00A371F7" Offset="0" />
+        <GradientStop Color="#80A371F7" Offset="0.5" />
+        <GradientStop Color="#00A371F7" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- logo 描边光晕 -->
+    <LinearGradientBrush x:Key="BrushAccentGradientSoft" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#402B1B45" Offset="0" />
+        <GradientStop Color="#202B1B45" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- ========== 字体 ========== -->
+    <FontFamily x:Key="FontFamilyApp">Microsoft YaHei UI, Segoe UI</FontFamily>
+    <FontFamily x:Key="FontFamilyIcon">Segoe MDL2 Assets</FontFamily>
+    <FontFamily x:Key="FontFamilyMono">Consolas, Cascadia Mono</FontFamily>
+
+</ResourceDictionary>

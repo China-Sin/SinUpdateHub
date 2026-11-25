@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>SinUpdateHub</AssemblyName>
+    <RootNamespace>SinUpdateHub.App</RootNamespace>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Product>SinUpdateHub</Product>
+    <AssemblyTitle>SinUpdateHub 软件更新管理器</AssemblyTitle>
+    <Description>GitHub / WinGet 软件更新管理器</Description>
+    <Version>1.0.0</Version>
+    <Company>SinUpdateHub</Company>
+    <Copyright>Copyright © 2026</Copyright>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- 说明：单文件 / 自包含 / 压缩等发布参数在 tools\publish.ps1 中以命令行传入，
+         避免日常 dotnet build 也走 RID 自包含构建（慢且易出错）。 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SinUpdateHub.Core\SinUpdateHub.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Assets\app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <EmbeddedResource Include="Assets\vditor-dist.zip" LogicalName="SinUpdateHub.App.Assets.vditor-dist.zip" />
+    <EmbeddedResource Include="Assets\sinnote-editor.html" LogicalName="SinUpdateHub.App.Assets.sinnote-editor.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4370.26" />
+  </ItemGroup>
+
+</Project>
