@@ -14,6 +14,10 @@
 param(
     [switch]$SkipPublish,
     [switch]$Relaunch,
+    [switch]$SkipGitHub,
+    [string]$CommitMessage = '',
+    [string]$ReleaseTag = '',
+    [string]$ReleaseNotes = '',
     [string]$ScreenshotDir = 'C:\Windows\Temp\uitest-v6',
     [int]$StopTimeoutSeconds = 20
 )
@@ -82,3 +86,57 @@ if ($Relaunch -or $wasRunning) {
 
 $size = [math]::Round((Get-Item $deliver).Length / 1MB, 1)
 Write-Host "==> 部署完成：$deliver（$size MB，$((Get-Item $deliver).LastWriteTime)）" -ForegroundColor Green
+
+# ---------- 5. 同步 GitHub（源码推送 + 可选发布/更新 Release 附件） ----------
+if (-not $SkipGitHub) {
+    Push-Location $root
+    try {
+        if (Test-Path (Join-Path $root '.git')) {
+            Write-Host "==> 同步源码到 GitHub（origin/main）" -ForegroundColor Cyan
+            git add -A | Out-Host
+            $dirty = git status --porcelain
+            if (-not [string]::IsNullOrWhiteSpace(($dirty -join ''))) {
+                $msg = if ([string]::IsNullOrWhiteSpace($CommitMessage)) {
+                    "chore: update SinUpdateHub ($(Get-Date -Format 'yyyy-MM-dd HH:mm'))"
+                } else {
+                    $CommitMessage
+                }
+                git commit -m $msg | Out-Host
+            }
+            git push origin main | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+                throw "git push 失败（退出码 $LASTEXITCODE）"
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($ReleaseTag)) {
+                Write-Host "==> 同步 GitHub Release：$ReleaseTag（上传 SinUpdateHub.exe）" -ForegroundColor Cyan
+                $exists = $true
+                try {
+                    gh release view $ReleaseTag *> $null
+                    if ($LASTEXITCODE -ne 0) { $exists = $false }
+                } catch {
+                    $exists = $false
+                }
+
+                if ($exists) {
+                    gh release upload $ReleaseTag $deliver --clobber | Out-Host
+                } else {
+                    $notes = if ([string]::IsNullOrWhiteSpace($ReleaseNotes)) {
+                        "SinUpdateHub $ReleaseTag 单文件正式版（Windows x64，免安装 .NET 运行时）。详见仓库 docs/更新日志.md。"
+                    } else {
+                        $ReleaseNotes
+                    }
+                    gh release create $ReleaseTag $deliver --title "SinUpdateHub $ReleaseTag" --notes $notes | Out-Host
+                }
+
+                if ($LASTEXITCODE -ne 0) {
+                    throw "GitHub Release 同步失败（退出码 $LASTEXITCODE）"
+                }
+            }
+
+            Write-Host "==> GitHub 同步完成" -ForegroundColor Green
+        }
+    } finally {
+        Pop-Location
+    }
+}
