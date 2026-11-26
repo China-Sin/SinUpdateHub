@@ -218,6 +218,7 @@ public partial class MarkdownNoteEditor : UserControl
             core.NewWindowRequested += Core_NewWindowRequested;
             core.WebMessageReceived += Core_WebMessageReceived;
             core.NavigationCompleted += Core_NavigationCompleted;
+            core.ProcessFailed += Core_ProcessFailed;
 
             _isCoreReady = true;
             core.Navigate(EditorUrl);
@@ -263,6 +264,21 @@ public partial class MarkdownNoteEditor : UserControl
             FallbackTitleText.Text = "Markdown 编辑器页面加载失败";
             FallbackDetailText.Text = $"错误代码：{e.WebErrorStatus}";
             FallbackOverlay.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void Core_ProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
+    {
+        AppLog.Write($"SinNote WebView2 进程异常（{e.ProcessFailedKind}），正在自动重载编辑器");
+        _isPageReady = false;
+        _pendingForceReload = true;
+        try
+        {
+            EditorWebView.CoreWebView2?.Navigate(EditorUrl);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write("重载 SinNote WebView2 失败", ex);
         }
     }
 

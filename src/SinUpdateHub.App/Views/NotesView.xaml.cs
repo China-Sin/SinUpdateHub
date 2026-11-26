@@ -17,6 +17,7 @@ public partial class NotesView : UserControl
         InitializeComponent();
 
         DataContextChanged += OnDataContextChanged;
+        Loaded += OnLoaded;
         Unloaded += (_, _) => Unsubscribe();
 
         MarkdownEditor.ContentChanged += OnEditorContentChanged;
@@ -30,23 +31,37 @@ public partial class NotesView : UserControl
 
     private NotesViewModel? Vm => DataContext as NotesViewModel;
 
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is NotesViewModel vm && !ReferenceEquals(_subscribedVm, vm))
+        {
+            Subscribe(vm);
+        }
+    }
+
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         Unsubscribe();
         if (DataContext is NotesViewModel vm)
         {
-            _subscribedVm = vm;
-            _subscribedVm.NavigateToMatchRequested += OnNavigateToMatchRequested;
-            _subscribedVm.InsertMarkdownRequested += OnInsertMarkdownRequested;
-            _subscribedVm.EditorReloadPageRequested += OnEditorReloadPageRequested;
-            _subscribedVm.TableColorsChangedRequested += OnTableColorsChangedRequested;
-            _subscribedVm.ClearSearchHighlightRequested += OnClearSearchHighlightRequested;
-            _subscribedVm.FlushEditorRequested += OnFlushEditorRequested;
-            _subscribedVm.TypographyChangedRequested += OnTypographyChangedRequested;
-
-            MarkdownEditor.UpdateTypography(_subscribedVm.NoteFontFamily, _subscribedVm.NoteZoomPercent);
-            MarkdownEditor.LoadPage(_subscribedVm.SelectedPage, force: true);
+            Subscribe(vm);
         }
+    }
+
+    private void Subscribe(NotesViewModel vm)
+    {
+        Unsubscribe();
+        _subscribedVm = vm;
+        _subscribedVm.NavigateToMatchRequested += OnNavigateToMatchRequested;
+        _subscribedVm.InsertMarkdownRequested += OnInsertMarkdownRequested;
+        _subscribedVm.EditorReloadPageRequested += OnEditorReloadPageRequested;
+        _subscribedVm.TableColorsChangedRequested += OnTableColorsChangedRequested;
+        _subscribedVm.ClearSearchHighlightRequested += OnClearSearchHighlightRequested;
+        _subscribedVm.FlushEditorRequested += OnFlushEditorRequested;
+        _subscribedVm.TypographyChangedRequested += OnTypographyChangedRequested;
+
+        MarkdownEditor.UpdateTypography(_subscribedVm.NoteFontFamily, _subscribedVm.NoteZoomPercent);
+        MarkdownEditor.LoadPage(_subscribedVm.SelectedPage, force: true);
     }
 
     private void Unsubscribe()

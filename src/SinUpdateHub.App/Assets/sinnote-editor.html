@@ -1353,18 +1353,24 @@
         }
 
         const nextMd = typeof payload.markdown === 'string' ? payload.markdown : '';
-        const shouldReloadValue = Boolean(payload.force) || currentPageId !== nextPageId || vditor.getValue() !== nextMd;
+        let currentVal = '';
+        try {
+          currentVal = vditor.getValue();
+        } catch (_) {
+          currentVal = '__err__';
+        }
+        const shouldReloadValue = Boolean(payload.force) || currentPageId !== nextPageId || currentVal !== nextMd;
         currentPageId = nextPageId;
-        applyTableColors(payload.colors);
-        applyTypography(payload.typography);
-        closeAllPopovers();
-        hideSelectionBar();
-        clearTableCellSelection();
+        try { applyTableColors(payload.colors); } catch (_) {}
+        try { applyTypography(payload.typography); } catch (_) {}
+        try { closeAllPopovers(); } catch (_) {}
+        try { hideSelectionBar(); } catch (_) {}
+        try { clearTableCellSelection(); } catch (_) {}
 
         if (shouldReloadValue) {
-          clearSearchHighlight();
-          clearSelectedImage();
-          hideTableBar();
+          try { clearSearchHighlight(); } catch (_) {}
+          try { clearSelectedImage(); } catch (_) {}
+          try { hideTableBar(); } catch (_) {}
           isProgrammatic = true;
           try {
             vditor.setValue(nextMd, true);

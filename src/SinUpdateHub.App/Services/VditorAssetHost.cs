@@ -11,7 +11,7 @@ public static class VditorAssetHost
 {
     private const string VditorZipResourceName = "SinUpdateHub.App.Assets.vditor-dist.zip";
     private const string EditorHtmlResourceName = "SinUpdateHub.App.Assets.sinnote-editor.html";
-    private const string StampVersion = "vditor-4.0.1-r13";
+    private const string StampVersion = "vditor-4.0.1-r14";
 
     public const string NoteImagesHostName = "sinnote-img.local";
 
