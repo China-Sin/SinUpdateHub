@@ -15,7 +15,7 @@ namespace SinUpdateHub.Core.Services;
 public sealed class BaiduPanService
 {
     public const string DefaultRedirectUri = "oob";
-    public const string DefaultAppRootDir = "/apps/SinUpdateHub";
+    public const string DefaultAppRootDir = "/";
     public const string BaiduDownloadUserAgent = "pan.baidu.com";
 
     private const int BufferSize = 81920;

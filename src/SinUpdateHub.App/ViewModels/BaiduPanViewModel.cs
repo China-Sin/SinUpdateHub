@@ -10,78 +10,6 @@ namespace SinUpdateHub.App.ViewModels;
 /// <summary>百度网盘面包屑路径段。</summary>
 public sealed record BaiduBreadcrumbItem(string Label, string FullPath, bool IsLast);
 
-/// <summary>百度网盘左侧可展开目录树节点（按需懒加载子文件夹）。</summary>
-public sealed class BaiduFolderNodeViewModel : ObservableObject
-{
-    private static readonly BaiduFolderNodeViewModel PlaceholderNode = new("(加载中…)", string.Empty, isPlaceholder: true);
-
-    private readonly Func<BaiduFolderNodeViewModel, Task>? _loadChildrenAsync;
-    private bool _isExpanded;
-    private bool _isSelected;
-    private bool _isLoaded;
-
-    private BaiduFolderNodeViewModel(string name, string fullPath, bool isPlaceholder)
-    {
-        Name = name;
-        FullPath = fullPath;
-        IsPlaceholder = isPlaceholder;
-    }
-
-    public BaiduFolderNodeViewModel(
-        string name,
-        string fullPath,
-        Func<BaiduFolderNodeViewModel, Task> loadChildrenAsync)
-    {
-        Name = name;
-        FullPath = fullPath;
-        _loadChildrenAsync = loadChildrenAsync;
-        Children.Add(PlaceholderNode);
-    }
-
-    public string Name { get; }
-
-    public string FullPath { get; }
-
-    public bool IsPlaceholder { get; }
-
-    public ObservableCollection<BaiduFolderNodeViewModel> Children { get; } = new();
-
-    public bool IsExpanded
-    {
-        get => _isExpanded;
-        set
-        {
-            if (SetProperty(ref _isExpanded, value) && value && !_isLoaded && _loadChildrenAsync is not null)
-            {
-                _ = _loadChildrenAsync(this);
-            }
-        }
-    }
-
-    public bool IsSelected
-    {
-        get => _isSelected;
-        set => SetProperty(ref _isSelected, value);
-    }
-
-    public void SetChildren(IEnumerable<BaiduFolderNodeViewModel> subfolders)
-    {
-        _isLoaded = true;
-        Children.Clear();
-        foreach (var child in subfolders)
-        {
-            Children.Add(child);
-        }
-    }
-
-    public void ResetForReload()
-    {
-        _isLoaded = false;
-        Children.Clear();
-        Children.Add(PlaceholderNode);
-    }
-}
-
 /// <summary>百度网盘列表项 ViewModel。</summary>
 public sealed class BaiduFileItemViewModel : ObservableObject
 {
@@ -210,7 +138,6 @@ public sealed class BaiduPanViewModel : ObservableObject
         CancelDownloadCommand = new RelayCommand(CancelDownload, () => IsDownloading);
 
         RebuildBreadcrumbs();
-        EnsureFolderTreeRoot();
     }
 
     /// <summary>请求主窗口弹出百度 OAuth2 登录窗口，返回授权码 code（取消返回 null）。</summary>
@@ -224,8 +151,6 @@ public sealed class BaiduPanViewModel : ObservableObject
     public Func<string, string, bool>? Confirm { get; set; }
 
     public ObservableCollection<BaiduFileItemViewModel> Items { get; } = new();
-
-    public ObservableCollection<BaiduFolderNodeViewModel> FolderTreeRoots { get; } = new();
 
     public ObservableCollection<BaiduBreadcrumbItem> Breadcrumbs { get; } = new();
 
@@ -443,14 +368,9 @@ public sealed class BaiduPanViewModel : ObservableObject
         }
 
         await RefreshDirAsync();
-        EnsureFolderTreeRoot(forceReset: true);
-        if (FolderTreeRoots.Count > 0)
-        {
-            FolderTreeRoots[0].IsExpanded = true;
-        }
     }
 
-    /// <summary>切到百度网盘页时若已登录且尚未加载过列表，则自动加载默认目录与目录树。</summary>
+    /// <summary>切到百度网盘页时若已登录且尚未加载过列表，则自动加载默认目录。</summary>
     public async Task OnShownAsync()
     {
         if (!IsLoggedIn || IsBusy || IsDownloading)
@@ -458,27 +378,8 @@ public sealed class BaiduPanViewModel : ObservableObject
             return;
         }
 
-        EnsureFolderTreeRoot();
         if (Items.Count == 0)
         {
-            await RefreshDirAsync();
-            if (FolderTreeRoots.Count > 0 && !FolderTreeRoots[0].IsExpanded)
-            {
-                FolderTreeRoots[0].IsExpanded = true;
-            }
-        }
-    }
-
-    public async Task SelectFolderNodeAsync(BaiduFolderNodeViewModel? node)
-    {
-        if (node is null || node.IsPlaceholder || string.IsNullOrWhiteSpace(node.FullPath) || IsBusy || IsDownloading)
-        {
-            return;
-        }
-
-        if (!string.Equals(BaiduPanService.NormalizeRemoteDir(CurrentDir), node.FullPath, StringComparison.OrdinalIgnoreCase))
-        {
-            CurrentDir = node.FullPath;
             await RefreshDirAsync();
         }
     }
@@ -499,58 +400,16 @@ public sealed class BaiduPanViewModel : ObservableObject
         var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0)
         {
-            Breadcrumbs.Add(new BaiduBreadcrumbItem("/", "/", true));
+            Breadcrumbs.Add(new BaiduBreadcrumbItem("根目录 /", "/", true));
             return;
         }
 
+        Breadcrumbs.Add(new BaiduBreadcrumbItem("根目录", "/", false));
         var acc = string.Empty;
         for (var i = 0; i < parts.Length; i++)
         {
             acc += "/" + parts[i];
             Breadcrumbs.Add(new BaiduBreadcrumbItem(parts[i], acc, i == parts.Length - 1));
-        }
-    }
-
-    private void EnsureFolderTreeRoot(bool forceReset = false)
-    {
-        if (!IsLoggedIn)
-        {
-            FolderTreeRoots.Clear();
-            return;
-        }
-
-        if (forceReset || FolderTreeRoots.Count == 0)
-        {
-            FolderTreeRoots.Clear();
-            var rootPath = BaiduPanService.DefaultAppRootDir;
-            var rootLabel = rootPath.TrimStart('/');
-            FolderTreeRoots.Add(new BaiduFolderNodeViewModel(rootLabel, rootPath, LoadFolderChildrenAsync));
-        }
-    }
-
-    private async Task LoadFolderChildrenAsync(BaiduFolderNodeViewModel node)
-    {
-        if (!IsLoggedIn || node.IsPlaceholder)
-        {
-            return;
-        }
-
-        try
-        {
-            var entries = await _services.BaiduPan.ListFilesAsync(
-                _services.Settings,
-                node.FullPath,
-                () => _services.SaveSettings());
-            var subfolders = entries
-                .Where(e => e.IsDir)
-                .Select(e => new BaiduFolderNodeViewModel(e.Name, e.Path, LoadFolderChildrenAsync))
-                .ToList();
-            node.SetChildren(subfolders);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"展开百度网盘目录失败：{node.FullPath}", ex);
-            node.SetChildren(Array.Empty<BaiduFolderNodeViewModel>());
         }
     }
 
@@ -570,7 +429,6 @@ public sealed class BaiduPanViewModel : ObservableObject
         _services.SaveSettings();
 
         Items.Clear();
-        FolderTreeRoots.Clear();
         RaisePropertyChanged(nameof(IsLoggedIn), nameof(AccountStatusText), nameof(HasNoItems), nameof(ItemCountText));
         RaiseCommands();
         StatusMessage = "已退出百度网盘登录";

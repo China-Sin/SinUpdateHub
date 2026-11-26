@@ -176,7 +176,7 @@ public sealed class MainViewModel : ObservableObject
             new(MainPage.Apps, "软件列表", "\uE8FD"),
             new(MainPage.Official, "软件下载", "\uE774"),
             new(MainPage.Notes, "SinNote", "\uE70B"),
-            new(MainPage.BaiduPan, "百度网盘", "\uE8B7"),
+            new(MainPage.BaiduPan, "百度网盘", "\uE896"),
             new(MainPage.Backup, "备份与恢复", "\uE753"),
             new(MainPage.Settings, "设置", "\uE713"),
         };
@@ -239,6 +239,7 @@ public sealed class MainViewModel : ObservableObject
         {
             if (_currentPage == MainPage.Notes && value != MainPage.Notes)
             {
+                NotesPage.IsSearchDropdownOpen = false;
                 NotesPage.FlushPendingSave();
             }
 

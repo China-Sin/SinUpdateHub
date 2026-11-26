@@ -97,8 +97,8 @@ public sealed class AppSettings
 
     public int BaiduVipType { get; set; }
 
-    /// <summary>默认浏览的网盘目录（个人开放平台应用默认在 /apps/SinUpdateHub 下）。</summary>
-    public string BaiduDefaultDir { get; set; } = "/apps/SinUpdateHub";
+    /// <summary>默认浏览的网盘目录（默认根目录 /）。</summary>
+    public string BaiduDefaultDir { get; set; } = "/";
 
     /// <summary>百度网盘文件下载保存目录（空 = 使用默认下载目录）。</summary>
     public string BaiduDownloadDir { get; set; } = string.Empty;
