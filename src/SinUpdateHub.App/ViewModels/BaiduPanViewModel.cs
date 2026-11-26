@@ -7,9 +7,91 @@ using SinUpdateHub.Core.Services;
 
 namespace SinUpdateHub.App.ViewModels;
 
+/// <summary>百度网盘面包屑路径段。</summary>
+public sealed record BaiduBreadcrumbItem(string Label, string FullPath, bool IsLast);
+
+/// <summary>百度网盘左侧可展开目录树节点（按需懒加载子文件夹）。</summary>
+public sealed class BaiduFolderNodeViewModel : ObservableObject
+{
+    private static readonly BaiduFolderNodeViewModel PlaceholderNode = new("(加载中…)", string.Empty, isPlaceholder: true);
+
+    private readonly Func<BaiduFolderNodeViewModel, Task>? _loadChildrenAsync;
+    private bool _isExpanded;
+    private bool _isSelected;
+    private bool _isLoaded;
+
+    private BaiduFolderNodeViewModel(string name, string fullPath, bool isPlaceholder)
+    {
+        Name = name;
+        FullPath = fullPath;
+        IsPlaceholder = isPlaceholder;
+    }
+
+    public BaiduFolderNodeViewModel(
+        string name,
+        string fullPath,
+        Func<BaiduFolderNodeViewModel, Task> loadChildrenAsync)
+    {
+        Name = name;
+        FullPath = fullPath;
+        _loadChildrenAsync = loadChildrenAsync;
+        Children.Add(PlaceholderNode);
+    }
+
+    public string Name { get; }
+
+    public string FullPath { get; }
+
+    public bool IsPlaceholder { get; }
+
+    public ObservableCollection<BaiduFolderNodeViewModel> Children { get; } = new();
+
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (SetProperty(ref _isExpanded, value) && value && !_isLoaded && _loadChildrenAsync is not null)
+            {
+                _ = _loadChildrenAsync(this);
+            }
+        }
+    }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value);
+    }
+
+    public void SetChildren(IEnumerable<BaiduFolderNodeViewModel> subfolders)
+    {
+        _isLoaded = true;
+        Children.Clear();
+        foreach (var child in subfolders)
+        {
+            Children.Add(child);
+        }
+    }
+
+    public void ResetForReload()
+    {
+        _isLoaded = false;
+        Children.Clear();
+        Children.Add(PlaceholderNode);
+    }
+}
+
 /// <summary>百度网盘列表项 ViewModel。</summary>
 public sealed class BaiduFileItemViewModel : ObservableObject
 {
+    // 矢量图标 Path（不依赖系统图标字体，彻底杜绝方框乱码）
+    public const string FolderPathData = "M10,4H4C2.9,4,2,4.9,2,6v12c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2V8c0-1.1-0.9-2-2-2h-8L10,4z";
+    private const string ArchivePathData = "M14,2H6C4.9,2,4,2.9,4,4v16c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2V8L14,2z M13,9V3.5L18.5,9H13z M9,6h2v2H9V6z M11,8h2v2h-2V8z M9,10h2v2H9V10z M11,12h2v2h-2V12z M9,14h4v3H9V14z";
+    private const string ExecutablePathData = "M4,4h16c1.1,0,2,0.9,2,2v12c0,1.1-0.9,2-2,2H4c-1.1,0-2-0.9-2-2V6C2,4.9,2.9,4,4,4z M4,8v10h16V8H4z M7,10.5l3.5,2.5L7,15.5V10.5z M12,14h5v1.5h-5V14z";
+    private const string DiscPathData = "M12,2C6.48,2,2,6.48,2,12s4.48,10,10,10s10-4.48,10-10S17.52,2,12,2z M12,15c-1.66,0-3-1.34-3-3s1.34-3,3-3s3,1.34,3,3S13.66,15,12,15z M12,11c-0.55,0-1,0.45-1,1s0.45,1,1,1s1-0.45,1-1S12.55,11,12,11z";
+    private const string GenericFilePathData = "M14,2H6C4.9,2,4,2.9,4,4v16c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2V8L14,2z M13,9V3.5L18.5,9H13z M8,13h8v1.5H8V13z M8,16h6v1.5H8V16z";
+
     private bool _isSelected;
 
     public BaiduFileItemViewModel(BaiduFileEntry entry)
@@ -31,7 +113,37 @@ public sealed class BaiduFileItemViewModel : ObservableObject
 
     public string Path => Entry.Path;
 
-    public string Glyph => Entry.IsDir ? "\uE8B7" : "\uE8A5";
+    public string IconPathData
+    {
+        get
+        {
+            if (Entry.IsDir) return FolderPathData;
+            var ext = System.IO.Path.GetExtension(Entry.Name).ToLowerInvariant();
+            return ext switch
+            {
+                ".zip" or ".rar" or ".7z" or ".tar" or ".gz" or ".xz" => ArchivePathData,
+                ".exe" or ".msi" or ".msix" or ".msixbundle" or ".bat" or ".cmd" or ".ps1" => ExecutablePathData,
+                ".iso" or ".img" or ".wim" or ".vhd" or ".vhdx" => DiscPathData,
+                _ => GenericFilePathData,
+            };
+        }
+    }
+
+    public string IconColorHex
+    {
+        get
+        {
+            if (Entry.IsDir) return "#E6B422";
+            var ext = System.IO.Path.GetExtension(Entry.Name).ToLowerInvariant();
+            return ext switch
+            {
+                ".zip" or ".rar" or ".7z" or ".tar" or ".gz" or ".xz" => "#A371F7",
+                ".exe" or ".msi" or ".msix" or ".msixbundle" or ".bat" or ".cmd" or ".ps1" => "#3FB950",
+                ".iso" or ".img" or ".wim" or ".vhd" or ".vhdx" => "#58A6FF",
+                _ => "#8B949E",
+            };
+        }
+    }
 
     public string TypeText => Entry.IsDir ? "文件夹" : "文件";
 
@@ -86,6 +198,7 @@ public sealed class BaiduPanViewModel : ObservableObject
         LoginCommand = new AsyncRelayCommand(LoginAsync, () => !IsBusy && !IsDownloading);
         LogoutCommand = new RelayCommand(Logout, () => IsLoggedIn && !IsBusy && !IsDownloading);
         NavigateDirCommand = new AsyncRelayCommand(RefreshDirAsync, () => IsLoggedIn && !IsBusy && !IsDownloading);
+        NavigateBreadcrumbCommand = new AsyncRelayCommand(NavigateBreadcrumbAsync, _ => IsLoggedIn && !IsBusy && !IsDownloading);
         GoParentCommand = new AsyncRelayCommand(GoParentAsync, () => IsLoggedIn && !IsBusy && !IsDownloading && CurrentDir != "/");
         RefreshCommand = new AsyncRelayCommand(RefreshDirAsync, () => IsLoggedIn && !IsBusy && !IsDownloading);
         SelectAllCommand = new RelayCommand(() => SetAllSelected(true), () => Items.Count > 0 && !IsDownloading);
@@ -95,6 +208,9 @@ public sealed class BaiduPanViewModel : ObservableObject
         DownloadSelectedCommand = new AsyncRelayCommand(DownloadSelectedAsync, () => IsLoggedIn && !IsBusy && !IsDownloading && Items.Count > 0);
         DownloadCurrentFolderCommand = new AsyncRelayCommand(DownloadCurrentFolderAsync, () => IsLoggedIn && !IsBusy && !IsDownloading && Items.Count > 0);
         CancelDownloadCommand = new RelayCommand(CancelDownload, () => IsDownloading);
+
+        RebuildBreadcrumbs();
+        EnsureFolderTreeRoot();
     }
 
     /// <summary>请求主窗口弹出百度 OAuth2 登录窗口，返回授权码 code（取消返回 null）。</summary>
@@ -108,6 +224,10 @@ public sealed class BaiduPanViewModel : ObservableObject
     public Func<string, string, bool>? Confirm { get; set; }
 
     public ObservableCollection<BaiduFileItemViewModel> Items { get; } = new();
+
+    public ObservableCollection<BaiduFolderNodeViewModel> FolderTreeRoots { get; } = new();
+
+    public ObservableCollection<BaiduBreadcrumbItem> Breadcrumbs { get; } = new();
 
     public string AppKey
     {
@@ -158,6 +278,7 @@ public sealed class BaiduPanViewModel : ObservableObject
         {
             if (SetProperty(ref _currentDir, value))
             {
+                RebuildBreadcrumbs();
                 RaiseCommands();
             }
         }
@@ -224,6 +345,7 @@ public sealed class BaiduPanViewModel : ObservableObject
     public ICommand LoginCommand { get; }
     public ICommand LogoutCommand { get; }
     public ICommand NavigateDirCommand { get; }
+    public ICommand NavigateBreadcrumbCommand { get; }
     public ICommand GoParentCommand { get; }
     public ICommand RefreshCommand { get; }
     public ICommand SelectAllCommand { get; }
@@ -321,6 +443,115 @@ public sealed class BaiduPanViewModel : ObservableObject
         }
 
         await RefreshDirAsync();
+        EnsureFolderTreeRoot(forceReset: true);
+        if (FolderTreeRoots.Count > 0)
+        {
+            FolderTreeRoots[0].IsExpanded = true;
+        }
+    }
+
+    /// <summary>切到百度网盘页时若已登录且尚未加载过列表，则自动加载默认目录与目录树。</summary>
+    public async Task OnShownAsync()
+    {
+        if (!IsLoggedIn || IsBusy || IsDownloading)
+        {
+            return;
+        }
+
+        EnsureFolderTreeRoot();
+        if (Items.Count == 0)
+        {
+            await RefreshDirAsync();
+            if (FolderTreeRoots.Count > 0 && !FolderTreeRoots[0].IsExpanded)
+            {
+                FolderTreeRoots[0].IsExpanded = true;
+            }
+        }
+    }
+
+    public async Task SelectFolderNodeAsync(BaiduFolderNodeViewModel? node)
+    {
+        if (node is null || node.IsPlaceholder || string.IsNullOrWhiteSpace(node.FullPath) || IsBusy || IsDownloading)
+        {
+            return;
+        }
+
+        if (!string.Equals(BaiduPanService.NormalizeRemoteDir(CurrentDir), node.FullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            CurrentDir = node.FullPath;
+            await RefreshDirAsync();
+        }
+    }
+
+    private async Task NavigateBreadcrumbAsync(object? parameter)
+    {
+        if (parameter is string targetPath && !string.IsNullOrWhiteSpace(targetPath))
+        {
+            CurrentDir = targetPath;
+            await RefreshDirAsync();
+        }
+    }
+
+    private void RebuildBreadcrumbs()
+    {
+        Breadcrumbs.Clear();
+        var normalized = BaiduPanService.NormalizeRemoteDir(_currentDir);
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            Breadcrumbs.Add(new BaiduBreadcrumbItem("/", "/", true));
+            return;
+        }
+
+        var acc = string.Empty;
+        for (var i = 0; i < parts.Length; i++)
+        {
+            acc += "/" + parts[i];
+            Breadcrumbs.Add(new BaiduBreadcrumbItem(parts[i], acc, i == parts.Length - 1));
+        }
+    }
+
+    private void EnsureFolderTreeRoot(bool forceReset = false)
+    {
+        if (!IsLoggedIn)
+        {
+            FolderTreeRoots.Clear();
+            return;
+        }
+
+        if (forceReset || FolderTreeRoots.Count == 0)
+        {
+            FolderTreeRoots.Clear();
+            var rootPath = BaiduPanService.DefaultAppRootDir;
+            var rootLabel = rootPath.TrimStart('/');
+            FolderTreeRoots.Add(new BaiduFolderNodeViewModel(rootLabel, rootPath, LoadFolderChildrenAsync));
+        }
+    }
+
+    private async Task LoadFolderChildrenAsync(BaiduFolderNodeViewModel node)
+    {
+        if (!IsLoggedIn || node.IsPlaceholder)
+        {
+            return;
+        }
+
+        try
+        {
+            var entries = await _services.BaiduPan.ListFilesAsync(
+                _services.Settings,
+                node.FullPath,
+                () => _services.SaveSettings());
+            var subfolders = entries
+                .Where(e => e.IsDir)
+                .Select(e => new BaiduFolderNodeViewModel(e.Name, e.Path, LoadFolderChildrenAsync))
+                .ToList();
+            node.SetChildren(subfolders);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"展开百度网盘目录失败：{node.FullPath}", ex);
+            node.SetChildren(Array.Empty<BaiduFolderNodeViewModel>());
+        }
     }
 
     private void Logout()
@@ -339,6 +570,7 @@ public sealed class BaiduPanViewModel : ObservableObject
         _services.SaveSettings();
 
         Items.Clear();
+        FolderTreeRoots.Clear();
         RaisePropertyChanged(nameof(IsLoggedIn), nameof(AccountStatusText), nameof(HasNoItems), nameof(ItemCountText));
         RaiseCommands();
         StatusMessage = "已退出百度网盘登录";
@@ -608,6 +840,7 @@ public sealed class BaiduPanViewModel : ObservableObject
         (LoginCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (LogoutCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (NavigateDirCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        (NavigateBreadcrumbCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (GoParentCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (RefreshCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (SelectAllCommand as RelayCommand)?.RaiseCanExecuteChanged();

@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using SinUpdateHub.App.ViewModels;
@@ -28,6 +29,15 @@ public partial class BaiduPanView : UserControl
             && item.IsDir)
         {
             await vm.OpenFolderAsync(item);
+        }
+    }
+
+    private async void FolderTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (DataContext is BaiduPanViewModel vm
+            && e.NewValue is BaiduFolderNodeViewModel node)
+        {
+            await vm.SelectFolderNodeAsync(node);
         }
     }
 }

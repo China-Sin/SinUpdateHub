@@ -234,127 +234,238 @@
                         </Button>
                     </Grid>
 
-                    <!-- 文件列表 -->
-                    <Border Grid.Row="2"
-                            Background="{StaticResource BrushBg0}"
-                            BorderBrush="{StaticResource BrushBorder}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="4">
-                        <Grid>
-                            <ListBox x:Name="FileListBox"
-                                     Background="Transparent"
-                                     BorderThickness="0"
-                                     ItemsSource="{Binding Items}"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                     MouseDoubleClick="FileListBox_MouseDoubleClick"
-                                     AutomationProperties.Name="百度网盘文件列表">
-                                <ListBox.ItemContainerStyle>
-                                    <Style TargetType="{x:Type ListBoxItem}">
-                                        <Setter Property="Background" Value="Transparent" />
-                                        <Setter Property="Foreground" Value="{StaticResource BrushText}" />
-                                        <Setter Property="Padding" Value="0" />
-                                        <Setter Property="Margin" Value="0,1" />
-                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="{x:Type ListBoxItem}">
-                                                    <Border x:Name="Bd"
-                                                            Background="Transparent"
-                                                            CornerRadius="6"
-                                                            Padding="10,7"
-                                                            SnapsToDevicePixels="True">
-                                                        <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrushBg2}" />
-                                                        </Trigger>
-                                                        <Trigger Property="IsSelected" Value="True">
-                                                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrushAccentSoft}" />
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </ListBox.ItemContainerStyle>
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="80" />
-                                                <ColumnDefinition Width="96" />
-                                                <ColumnDefinition Width="130" />
-                                            </Grid.ColumnDefinitions>
+                    <!-- 左侧可展开目录树 + 右侧文件列表 -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                                            <CheckBox Grid.Column="0"
-                                                      Style="{StaticResource InputCheck}"
-                                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                        <!-- 左侧网盘目录树 -->
+                        <Border Grid.Column="0"
+                                Background="{StaticResource BrushBg0}"
+                                BorderBrush="{StaticResource BrushBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="6">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0"
+                                           Text="网盘目录树（点击箭头展开）"
+                                           FontSize="11"
+                                           Foreground="{StaticResource BrushTextMuted}"
+                                           Margin="4,2,4,6" />
+
+                                <TreeView x:Name="FolderTreeView"
+                                          Grid.Row="1"
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          ItemsSource="{Binding FolderTreeRoots}"
+                                          SelectedItemChanged="FolderTreeView_SelectedItemChanged"
+                                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                          AutomationProperties.Name="百度网盘目录树">
+                                    <TreeView.ItemContainerStyle>
+                                        <Style TargetType="{x:Type TreeViewItem}">
+                                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                                            <Setter Property="Foreground" Value="{StaticResource BrushText}" />
+                                            <Setter Property="Background" Value="Transparent" />
+                                            <Setter Property="Padding" Value="2,3" />
+                                            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                        </Style>
+                                    </TreeView.ItemContainerStyle>
+                                    <TreeView.ItemTemplate>
+                                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="2,2">
+                                                <Path Data="M10,4H4C2.9,4,2,4.9,2,6v12c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2V8c0-1.1-0.9-2-2-2h-8L10,4z"
+                                                      Fill="#E6B422"
+                                                      Width="14"
+                                                      Height="14"
+                                                      Stretch="Uniform"
                                                       VerticalAlignment="Center"
-                                                      Margin="0,0,10,0" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding Glyph}"
-                                                       FontFamily="{StaticResource FontFamilyIcon}"
-                                                       FontSize="14"
-                                                       Foreground="{StaticResource BrushAccent}"
-                                                       VerticalAlignment="Center"
-                                                       Margin="0,0,8,0" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="{Binding Name}"
-                                                       FontSize="13"
-                                                       Foreground="{StaticResource BrushText}"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="3"
-                                                       Text="{Binding TypeText}"
-                                                       FontSize="11.5"
-                                                       Foreground="{StaticResource BrushTextMuted}"
-                                                       VerticalAlignment="Center"
-                                                       Margin="8,0,0,0" />
-                                            <TextBlock Grid.Column="4"
-                                                       Text="{Binding SizeText}"
-                                                       FontSize="11.5"
-                                                       Foreground="{StaticResource BrushTextSecondary}"
-                                                       TextAlignment="Right"
-                                                       VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="5"
-                                                       Text="{Binding ModifiedText}"
-                                                       FontSize="11.5"
-                                                       Foreground="{StaticResource BrushTextMuted}"
-                                                       TextAlignment="Right"
-                                                       VerticalAlignment="Center" />
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
+                                                      Margin="0,0,6,0" />
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="12.5"
+                                                           Foreground="{StaticResource BrushText}"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </HierarchicalDataTemplate>
+                                    </TreeView.ItemTemplate>
+                                </TreeView>
+                            </Grid>
+                        </Border>
 
-                            <!-- 空状态提示 -->
-                            <StackPanel HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        IsHitTestVisible="False"
-                                        Visibility="{Binding HasNoItems, Converter={StaticResource BoolToVis}}">
-                                <TextBlock Text="&#xE8B7;"
-                                           FontFamily="{StaticResource FontFamilyIcon}"
-                                           FontSize="30"
-                                           Foreground="{StaticResource BrushTextMuted}"
-                                           HorizontalAlignment="Center" />
-                                <TextBlock Text="{Binding ItemCountText}"
-                                           FontSize="13"
-                                           Foreground="{StaticResource BrushTextSecondary}"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,8,0,2" />
-                                <TextBlock Text="双击文件夹可进入子目录，支持勾选下载或一键下载当前文件夹全部内容"
-                                           FontSize="11.5"
-                                           Foreground="{StaticResource BrushTextMuted}"
-                                           HorizontalAlignment="Center" />
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                        <!-- 右侧文件列表 + 面包屑 -->
+                        <Border Grid.Column="2"
+                                Background="{StaticResource BrushBg0}"
+                                BorderBrush="{StaticResource BrushBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="6">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <!-- 可点击面包屑路径 -->
+                                <Border Grid.Row="0"
+                                        BorderBrush="{StaticResource BrushBorder}"
+                                        BorderThickness="0,0,0,1"
+                                        Padding="4,2,4,6"
+                                        Margin="0,0,0,4">
+                                    <ItemsControl ItemsSource="{Binding Breadcrumbs}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button Style="{StaticResource GhostButton}"
+                                                            Height="24"
+                                                            MinHeight="24"
+                                                            Padding="6,0"
+                                                            Command="{Binding DataContext.NavigateBreadcrumbCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                            CommandParameter="{Binding FullPath}">
+                                                        <TextBlock Text="{Binding Label}" FontSize="12" VerticalAlignment="Center" />
+                                                    </Button>
+                                                    <TextBlock Text="/"
+                                                               FontSize="11.5"
+                                                               Foreground="{StaticResource BrushTextMuted}"
+                                                               VerticalAlignment="Center"
+                                                               Margin="2,0"
+                                                               Visibility="{Binding IsLast, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Border>
+
+                                <Grid Grid.Row="1">
+                                    <ListBox x:Name="FileListBox"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             ItemsSource="{Binding Items}"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                             MouseDoubleClick="FileListBox_MouseDoubleClick"
+                                             AutomationProperties.Name="百度网盘文件列表">
+                                        <ListBox.ItemContainerStyle>
+                                            <Style TargetType="{x:Type ListBoxItem}">
+                                                <Setter Property="Background" Value="Transparent" />
+                                                <Setter Property="Foreground" Value="{StaticResource BrushText}" />
+                                                <Setter Property="Padding" Value="0" />
+                                                <Setter Property="Margin" Value="0,1" />
+                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                                            <Border x:Name="Bd"
+                                                                    Background="Transparent"
+                                                                    CornerRadius="6"
+                                                                    Padding="10,7"
+                                                                    SnapsToDevicePixels="True">
+                                                                <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrushBg2}" />
+                                                                </Trigger>
+                                                                <Trigger Property="IsSelected" Value="True">
+                                                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrushAccentSoft}" />
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </ListBox.ItemContainerStyle>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="68" />
+                                                        <ColumnDefinition Width="92" />
+                                                        <ColumnDefinition Width="126" />
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <CheckBox Grid.Column="0"
+                                                              Style="{StaticResource InputCheck}"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              VerticalAlignment="Center"
+                                                              Margin="0,0,10,0" />
+                                                    <Path Grid.Column="1"
+                                                          Data="{Binding IconPathData}"
+                                                          Fill="{Binding IconColorHex, Converter={StaticResource HexToBrush}}"
+                                                          Width="16"
+                                                          Height="16"
+                                                          Stretch="Uniform"
+                                                          VerticalAlignment="Center"
+                                                          Margin="0,0,9,0" />
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding Name}"
+                                                               FontSize="13"
+                                                               Foreground="{StaticResource BrushText}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="3"
+                                                               Text="{Binding TypeText}"
+                                                               FontSize="11.5"
+                                                               Foreground="{StaticResource BrushTextMuted}"
+                                                               VerticalAlignment="Center"
+                                                               Margin="8,0,0,0" />
+                                                    <TextBlock Grid.Column="4"
+                                                               Text="{Binding SizeText}"
+                                                               FontSize="11.5"
+                                                               Foreground="{StaticResource BrushTextSecondary}"
+                                                               TextAlignment="Right"
+                                                               VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="5"
+                                                               Text="{Binding ModifiedText}"
+                                                               FontSize="11.5"
+                                                               Foreground="{StaticResource BrushTextMuted}"
+                                                               TextAlignment="Right"
+                                                               VerticalAlignment="Center" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+
+                                    <!-- 空状态提示 -->
+                                    <StackPanel HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                IsHitTestVisible="False"
+                                                Visibility="{Binding HasNoItems, Converter={StaticResource BoolToVis}}">
+                                        <Path Data="M10,4H4C2.9,4,2,4.9,2,6v12c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2V8c0-1.1-0.9-2-2-2h-8L10,4z"
+                                              Fill="{StaticResource BrushTextMuted}"
+                                              Width="30"
+                                              Height="30"
+                                              Stretch="Uniform"
+                                              HorizontalAlignment="Center" />
+                                        <TextBlock Text="{Binding ItemCountText}"
+                                                   FontSize="13"
+                                                   Foreground="{StaticResource BrushTextSecondary}"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,8,0,2" />
+                                        <TextBlock Text="左侧目录树可展开浏览，右侧双击文件夹进入子目录"
+                                                   FontSize="11.5"
+                                                   Foreground="{StaticResource BrushTextMuted}"
+                                                   HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
 
                     <!-- 底部操作条 + 下载进度 -->
                     <StackPanel Grid.Row="3" Margin="0,12,0,0">

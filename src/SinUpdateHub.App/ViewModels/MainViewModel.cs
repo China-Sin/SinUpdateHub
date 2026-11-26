@@ -315,6 +315,17 @@ public sealed class MainViewModel : ObservableObject
                 AppLog.Write("刷新设置页状态失败", ex);
             }
         }
+        else if (item.Page == MainPage.BaiduPan)
+        {
+            try
+            {
+                await BaiduPanPage.OnShownAsync();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("刷新百度网盘页失败", ex);
+            }
+        }
     }
 
     public string PageTitle => _currentPage switch
