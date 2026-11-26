@@ -69,6 +69,7 @@ public sealed class SettingsStore : ISettingsStore
 
             stored.WebDavPassword = SecretProtector.Unprotect(stored.WebDavPassword);
             stored.GitHubToken = SecretProtector.Unprotect(stored.GitHubToken);
+            stored.BaiduAppKey = SecretProtector.Unprotect(stored.BaiduAppKey);
             stored.BaiduSecretKey = SecretProtector.Unprotect(stored.BaiduSecretKey);
             stored.BaiduAccessToken = SecretProtector.Unprotect(stored.BaiduAccessToken);
             stored.BaiduRefreshToken = SecretProtector.Unprotect(stored.BaiduRefreshToken);
@@ -141,6 +142,7 @@ public sealed class SettingsStore : ISettingsStore
         var stored = settings.Clone();
         stored.WebDavPassword = SecretProtector.Protect(settings.WebDavPassword);
         stored.GitHubToken = SecretProtector.Protect(settings.GitHubToken);
+        stored.BaiduAppKey = SecretProtector.Protect(settings.BaiduAppKey);
         stored.BaiduSecretKey = SecretProtector.Protect(settings.BaiduSecretKey);
         stored.BaiduAccessToken = SecretProtector.Protect(settings.BaiduAccessToken);
         stored.BaiduRefreshToken = SecretProtector.Protect(settings.BaiduRefreshToken);

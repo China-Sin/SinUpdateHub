@@ -94,6 +94,7 @@ public sealed class BaiduPanViewModel : ObservableObject
     private readonly AppServices _services;
 
     private string _appKey;
+    private bool _showAppKey;
     private string _secretKey;
     private bool _showSecretKey;
     private string _currentDir;
@@ -158,6 +159,12 @@ public sealed class BaiduPanViewModel : ObservableObject
     {
         get => _appKey;
         set => SetProperty(ref _appKey, value);
+    }
+
+    public bool ShowAppKey
+    {
+        get => _showAppKey;
+        set => SetProperty(ref _showAppKey, value);
     }
 
     public string SecretKey

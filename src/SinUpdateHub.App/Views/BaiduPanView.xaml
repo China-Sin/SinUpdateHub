@@ -48,10 +48,25 @@
 
                         <!-- AppKey -->
                         <StackPanel Grid.Column="0">
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="AppKey（手动填写）" />
-                            <TextBox Style="{StaticResource InputBox}"
-                                     Text="{Binding AppKey, UpdateSourceTrigger=PropertyChanged}"
-                                     AutomationProperties.Name="百度网盘 AppKey" />
+                            <Grid>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="AppKey（本地加密保存）" />
+                                <CheckBox Style="{StaticResource InputCheck}"
+                                          Content="显示"
+                                          IsChecked="{Binding ShowAppKey}"
+                                          HorizontalAlignment="Right"
+                                          VerticalAlignment="Center"
+                                          FontSize="11" />
+                            </Grid>
+                            <Grid>
+                                <PasswordBox Style="{StaticResource InputPassword}"
+                                             controls:PasswordBoxHelper.BindPassword="{Binding AppKey, Mode=TwoWay}"
+                                             AutomationProperties.Name="百度网盘 AppKey"
+                                             Visibility="{Binding ShowAppKey, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                                <TextBox Style="{StaticResource InputBox}"
+                                         Text="{Binding AppKey, UpdateSourceTrigger=PropertyChanged}"
+                                         AutomationProperties.Name="百度网盘 AppKey 明文"
+                                         Visibility="{Binding ShowAppKey, Converter={StaticResource BoolToVis}}" />
+                            </Grid>
                         </StackPanel>
 
                         <!-- SecretKey -->
