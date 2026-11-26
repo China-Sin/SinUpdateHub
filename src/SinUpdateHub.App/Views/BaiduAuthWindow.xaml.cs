@@ -48,8 +48,7 @@ public partial class BaiduAuthWindow : Window
             {
                 TryCaptureCode(AuthWebView.Source?.AbsoluteUri);
                 if (!_completed && AuthWebView.Source is { } uri
-                    && uri.Host.Equals("openapi.baidu.com", StringComparison.OrdinalIgnoreCase)
-                    && uri.AbsolutePath.Contains("login_success", StringComparison.OrdinalIgnoreCase))
+                    && uri.Host.Equals("openapi.baidu.com", StringComparison.OrdinalIgnoreCase))
                 {
                     await TryCaptureCodeFromPageAsync();
                 }
@@ -87,10 +86,23 @@ public partial class BaiduAuthWindow : Window
     {
         try
         {
-            var json = await AuthWebView.CoreWebView2.ExecuteScriptAsync(
-                "(function(){ var el = document.querySelector('input[type=\"text\"], #verifier, .code'); return el ? (el.value || el.innerText || '') : ''; })()");
+            // 百度 oob 授权页会在页面上渲染一个装有 32 位十六进制授权码的 input 框（旁边是「复制授权码」按钮）
+            var script = @"(function(){
+                var inputs = document.querySelectorAll('input');
+                for (var i = 0; i < inputs.length; i++) {
+                    var v = (inputs[i].value || '').trim();
+                    if (/^[a-f0-9]{24,64}$/i.test(v)) return v;
+                }
+                var bodyText = document.body ? (document.body.innerText || '') : '';
+                if (bodyText.indexOf('授权码') >= 0) {
+                    var m = bodyText.match(/\b[a-f0-9]{24,64}\b/i);
+                    if (m) return m[0];
+                }
+                return '';
+            })()";
+            var json = await AuthWebView.CoreWebView2.ExecuteScriptAsync(script);
             var extracted = System.Text.Json.JsonSerializer.Deserialize<string>(json)?.Trim();
-            if (!string.IsNullOrWhiteSpace(extracted) && extracted.Length >= 8)
+            if (!string.IsNullOrWhiteSpace(extracted) && extracted.Length >= 24)
             {
                 CompleteWithCode(extracted);
             }

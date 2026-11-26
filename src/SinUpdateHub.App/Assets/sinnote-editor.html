@@ -1561,6 +1561,7 @@
           if (e.key === 'Backspace' && tryDeletePrecedingBrInTableCell()) {
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
             return;
           }
         }
@@ -2233,7 +2234,10 @@
         const sel = window.getSelection();
         if (!sel || !sel.isCollapsed || sel.rangeCount === 0) return false;
         const range = sel.getRangeAt(0);
-        const cell = getClosestTableCell(range.startContainer);
+        const startEl = range.startContainer.nodeType === Node.ELEMENT_NODE
+          ? range.startContainer
+          : range.startContainer.parentElement;
+        const cell = startEl && startEl.closest ? startEl.closest('th, td') : null;
         if (!cell) return false;
 
         const isIgnorableNode = (n) => {
