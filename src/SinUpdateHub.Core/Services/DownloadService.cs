@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Net.Http.Headers;
 using SinUpdateHub.Core.Abstractions;
 using SinUpdateHub.Core.Models;
 
@@ -115,6 +116,24 @@ public sealed class DownloadService : IDownloadService
             lastError);
     }
 
+    /// <summary>判断是否为 GitHub Release 资产 API 链接（私密仓库必须携带 Accept: application/octet-stream 与 Bearer Token）。</summary>
+    internal static bool IsGitHubReleaseAssetApiUri(Uri uri) =>
+        uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
+        && uri.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase)
+        && uri.AbsolutePath.Contains("/releases/assets/", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>构造下载请求（GitHub Release 资产 API 自动附加 Accept: application/octet-stream）。</summary>
+    internal static HttpRequestMessage CreateDownloadRequest(Uri uri)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        if (IsGitHubReleaseAssetApiUri(uri))
+        {
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/octet-stream"));
+        }
+
+        return request;
+    }
+
     /// <summary>单次下载尝试：连接超时 + 停滞检测 + 流式写盘。</summary>
     private async Task<string> DownloadOnceAsync(
         Uri uri,
@@ -130,8 +149,9 @@ public sealed class DownloadService : IDownloadService
         HttpResponseMessage response;
         try
         {
+            using var request = CreateDownloadRequest(uri);
             response = await _factory.DownloadClient
-                .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, stallCts.Token)
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, stallCts.Token)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

@@ -58,11 +58,14 @@ public sealed class GitHubSourceProvider : IUpdateSourceProvider
 
         var owner = repo.Value.Owner;
         var repoName = repo.Value.Repo;
-        var includePrerelease = _settings().IncludePrerelease;
+        var settings = _settings();
+        var includePrerelease = settings.IncludePrerelease;
+        var hasToken = !string.IsNullOrWhiteSpace(settings.GitHubToken);
         var cacheKey = string.Join(
             '|',
             owner + "/" + repoName,
             includePrerelease,
+            hasToken,
             entry.Package ?? string.Empty,
             entry.PackageIsRegex);
 
@@ -85,14 +88,22 @@ public sealed class GitHubSourceProvider : IUpdateSourceProvider
             throw new UpdateSourceException("无法从 Release 标签解析版本号，请确认该仓库的最新发布带有 tag");
         }
 
+        // 已配置 GitHub Token 时优先使用资产 API URL（兼容私密仓库与公开仓库，下载时携带 Bearer Token + Accept: application/octet-stream）
         var assets = (release.Assets ?? new List<AssetDto>())
-            .Where(a => !string.IsNullOrWhiteSpace(a.Name) && !string.IsNullOrWhiteSpace(a.BrowserDownloadUrl))
-            .Select(a => new AssetCandidate
+            .Where(a => !string.IsNullOrWhiteSpace(a.Name)
+                && (!string.IsNullOrWhiteSpace(a.BrowserDownloadUrl) || !string.IsNullOrWhiteSpace(a.ApiUrl)))
+            .Select(a =>
             {
-                Name = a.Name!.Trim(),
-                Url = a.BrowserDownloadUrl!.Trim(),
-                Size = a.Size,
-                ContentType = a.ContentType,
+                var downloadUrl = hasToken && !string.IsNullOrWhiteSpace(a.ApiUrl)
+                    ? a.ApiUrl!.Trim()
+                    : (a.BrowserDownloadUrl ?? a.ApiUrl)!.Trim();
+                return new AssetCandidate
+                {
+                    Name = a.Name!.Trim(),
+                    Url = downloadUrl,
+                    Size = a.Size,
+                    ContentType = a.ContentType,
+                };
             })
             .ToList();
 
@@ -338,6 +349,9 @@ public sealed class GitHubSourceProvider : IUpdateSourceProvider
     /// <summary>GitHub Release Asset JSON。</summary>
     private sealed class AssetDto
     {
+        [JsonPropertyName("url")]
+        public string? ApiUrl { get; set; }
+
         [JsonPropertyName("name")]
         public string? Name { get; set; }
 

@@ -812,6 +812,25 @@ internal sealed class SmokeRunner
                     "BUG2：第三方 HTTPS 域名不附加 Token",
                     thirdPartyReq.Headers.Authorization is null && !thirdPartyReq.Headers.Contains("X-GitHub-Api-Version"),
                     "第三方域名错误附加了认证头");
+
+                using var privateAssetReq = DownloadService.CreateDownloadRequest(
+                    new Uri("https://api.github.com/repos/China-Sin/SinUpdateHub/releases/assets/123456"));
+                NetworkClientFactory.ApplyGitHubHeaders(privateAssetReq, secretToken);
+                Check(
+                    "GitHub 私密仓库下载：资产 API 请求携带 Token 与纯 application/octet-stream（不混入 vnd.github+json）",
+                    privateAssetReq.Headers.Authorization?.Scheme == "Bearer"
+                    && privateAssetReq.Headers.Authorization?.Parameter == secretToken
+                    && privateAssetReq.Headers.Accept.Count == 1
+                    && privateAssetReq.Headers.Accept.Any(a => a.MediaType == "application/octet-stream"),
+                    $"Accept={string.Join(",", privateAssetReq.Headers.Accept.Select(a => a.MediaType))}");
+
+                using var publicDlReq = DownloadService.CreateDownloadRequest(
+                    new Uri("https://github.com/China-Sin/SinUpdateHub/releases/download/v1.0.0/SinUpdateHub.exe"));
+                NetworkClientFactory.ApplyGitHubHeaders(publicDlReq, secretToken);
+                Check(
+                    "GitHub 公开下载链接：不附加 Token 也不附加 application/octet-stream",
+                    publicDlReq.Headers.Authorization is null && publicDlReq.Headers.Accept.Count == 0,
+                    $"Auth={publicDlReq.Headers.Authorization}, AcceptCount={publicDlReq.Headers.Accept.Count}");
             }
             finally
             {

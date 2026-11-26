@@ -100,7 +100,8 @@ public sealed class NetworkClientFactory : IDisposable
             return;
         }
 
-        if (!request.Headers.Accept.Any(a => string.Equals(a.MediaType, "application/vnd.github+json", StringComparison.OrdinalIgnoreCase)))
+        // 若调用方已明确指定 Accept（例如下载私密仓库 Release 附件时的 application/octet-stream），保留调用方设定
+        if (request.Headers.Accept.Count == 0)
         {
             request.Headers.Accept.ParseAdd("application/vnd.github+json");
         }
