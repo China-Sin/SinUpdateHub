@@ -1705,6 +1705,42 @@ internal sealed class SmokeRunner
                 && clampedAuto.AutoBackupEnabled
                 && clampedAuto.AutoBackupIntervalHours == 24,
                 $"dueFirst={dueFirst}, 23h={dueAt23h}, 24h={dueAt24h}, disabled={dueWhenDisabled}, clamped={clampedAuto.AutoBackupIntervalHours}");
+
+            // 16) 百度网盘：授权 URL、回调 code 提取、路径规范化、dlink 请求头与 SecretKey/Token DPAPI 加密
+            var authUrl = BaiduPanService.BuildAuthorizeUrl("demo-app-key");
+            var codeFromQuery = BaiduPanService.TryExtractAuthCode(new Uri("https://openapi.baidu.com/oauth/2.0/login_success?code=abc123456"));
+            var codeFromFrag = BaiduPanService.TryExtractAuthCode(new Uri("https://openapi.baidu.com/oauth/2.0/login_success#code=xyz987654&state=1"));
+            var normDir = BaiduPanService.NormalizeRemoteDir(@"apps\SinUpdateHub//tools/");
+            var parentDir = BaiduPanService.GetParentDir("/apps/SinUpdateHub/tools");
+            using var dlinkReq = BaiduPanService.CreateDlinkDownloadRequest("https://d.pcs.baidu.com/file/test?fid=1", "tok_test_123");
+            var baiduSettingsPath = Path.Combine(tempDir, "baidu-settings.json");
+            var baiduStore = new SettingsStore(baiduSettingsPath);
+            baiduStore.Save(new AppSettings
+            {
+                BaiduAppKey = "my_app_key",
+                BaiduSecretKey = "my_secret_key_999",
+                BaiduAccessToken = "my_access_token_888",
+                BaiduRefreshToken = "my_refresh_token_777",
+            });
+            var baiduRawJson = File.ReadAllText(baiduSettingsPath);
+            var baiduLoaded = baiduStore.Load();
+            Check(
+                "百度网盘：OAuth URL、code 提取、路径规范化、pan.baidu.com UA 与密钥 DPAPI 加密往返",
+                authUrl.Contains("client_id=demo-app-key", StringComparison.Ordinal)
+                && authUrl.Contains("redirect_uri=oob", StringComparison.Ordinal)
+                && codeFromQuery == "abc123456"
+                && codeFromFrag == "xyz987654"
+                && normDir == "/apps/SinUpdateHub/tools"
+                && parentDir == "/apps/SinUpdateHub"
+                && dlinkReq.Headers.UserAgent.ToString() == "pan.baidu.com"
+                && dlinkReq.RequestUri!.AbsoluteUri.Contains("access_token=tok_test_123", StringComparison.Ordinal)
+                && !baiduRawJson.Contains("my_secret_key_999", StringComparison.Ordinal)
+                && !baiduRawJson.Contains("my_access_token_888", StringComparison.Ordinal)
+                && !baiduRawJson.Contains("my_refresh_token_777", StringComparison.Ordinal)
+                && baiduLoaded.BaiduSecretKey == "my_secret_key_999"
+                && baiduLoaded.BaiduAccessToken == "my_access_token_888"
+                && baiduLoaded.BaiduRefreshToken == "my_refresh_token_777",
+                $"normDir={normDir}, parent={parentDir}, ua={dlinkReq.Headers.UserAgent}");
         }
         catch (Exception ex)
         {

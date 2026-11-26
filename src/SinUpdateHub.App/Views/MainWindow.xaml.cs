@@ -33,6 +33,8 @@ public partial class MainWindow : Window
         _viewModel.NotesPage.PromptText = ShowTextPrompt;
         _viewModel.NotesPage.PreviewImage = ShowImagePreview;
         _viewModel.NotesPage.OpenTrashRequested = ShowNoteTrash;
+        _viewModel.BaiduPanPage.AuthorizeBaiduRequested = ShowBaiduAuth;
+        _viewModel.BaiduPanPage.PickFolderRequested = ShowFolderPicker;
         _viewModel.BackupPage.SelectRestoreItems = ShowRestoreSelection;
 
         DataContext = _viewModel;
@@ -167,6 +169,22 @@ public partial class MainWindow : Window
     {
         var window = new NoteTrashWindow(_viewModel.NotesPage) { Owner = this };
         window.ShowDialog();
+    }
+
+    private string? ShowBaiduAuth(string appKey)
+    {
+        var window = new BaiduAuthWindow(appKey) { Owner = this };
+        return window.ShowDialog() == true ? window.AuthCode : null;
+    }
+
+    private string? ShowFolderPicker(string initialDirectory)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "选择百度网盘下载保存目录",
+            InitialDirectory = System.IO.Directory.Exists(initialDirectory) ? initialDirectory : string.Empty,
+        };
+        return dialog.ShowDialog(this) == true ? dialog.FolderName : null;
     }
 
     private RestoreSelectionResult? ShowRestoreSelection(string sourceName, AppData incomingData)

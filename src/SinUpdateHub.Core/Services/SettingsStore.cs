@@ -69,6 +69,9 @@ public sealed class SettingsStore : ISettingsStore
 
             stored.WebDavPassword = SecretProtector.Unprotect(stored.WebDavPassword);
             stored.GitHubToken = SecretProtector.Unprotect(stored.GitHubToken);
+            stored.BaiduSecretKey = SecretProtector.Unprotect(stored.BaiduSecretKey);
+            stored.BaiduAccessToken = SecretProtector.Unprotect(stored.BaiduAccessToken);
+            stored.BaiduRefreshToken = SecretProtector.Unprotect(stored.BaiduRefreshToken);
 
             // 手改 JSON 把字段写成 null 时的兜底（不允许非空字段变 null）
             var defaults = new AppSettings();
@@ -78,6 +81,16 @@ public sealed class SettingsStore : ISettingsStore
             stored.WebDavUrl ??= defaults.WebDavUrl;
             stored.WebDavUser ??= defaults.WebDavUser;
             stored.WebDavPassword ??= defaults.WebDavPassword;
+            stored.BaiduAppKey ??= defaults.BaiduAppKey;
+            stored.BaiduSecretKey ??= defaults.BaiduSecretKey;
+            stored.BaiduAccessToken ??= defaults.BaiduAccessToken;
+            stored.BaiduRefreshToken ??= defaults.BaiduRefreshToken;
+            stored.BaiduUserName ??= defaults.BaiduUserName;
+            stored.BaiduDownloadDir ??= defaults.BaiduDownloadDir;
+            if (string.IsNullOrWhiteSpace(stored.BaiduDefaultDir))
+            {
+                stored.BaiduDefaultDir = defaults.BaiduDefaultDir;
+            }
             if (string.IsNullOrWhiteSpace(stored.WebDavFolder))
             {
                 stored.WebDavFolder = defaults.WebDavFolder;
@@ -128,6 +141,9 @@ public sealed class SettingsStore : ISettingsStore
         var stored = settings.Clone();
         stored.WebDavPassword = SecretProtector.Protect(settings.WebDavPassword);
         stored.GitHubToken = SecretProtector.Protect(settings.GitHubToken);
+        stored.BaiduSecretKey = SecretProtector.Protect(settings.BaiduSecretKey);
+        stored.BaiduAccessToken = SecretProtector.Protect(settings.BaiduAccessToken);
+        stored.BaiduRefreshToken = SecretProtector.Protect(settings.BaiduRefreshToken);
 
         var json = JsonSerializer.Serialize(stored, JsonConfig.Options);
         var tempPath = FilePath + ".tmp";

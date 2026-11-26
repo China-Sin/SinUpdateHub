@@ -1,0 +1,130 @@
+<Window x:Class="SinUpdateHub.App.Views.BaiduAuthWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        mc:Ignorable="d"
+        Title="登录百度网盘"
+        Width="780"
+        Height="660"
+        MinWidth="620"
+        MinHeight="520"
+        ResizeMode="CanResizeWithGrip"
+        WindowStyle="None"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource BrushBg0}"
+        Style="{StaticResource WindowBaseStyle}">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            CornerRadius="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Border BorderBrush="{StaticResource BrushBorderStrong}" BorderThickness="1">
+        <Grid Background="{StaticResource BrushBg0}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="44" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- 标题栏 -->
+            <Grid Grid.Row="0" Background="{StaticResource BrushBg1}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Margin="16,0,0,0">
+                    <TextBlock Text="&#xE753;"
+                               FontFamily="{StaticResource FontFamilyIcon}"
+                               FontSize="15"
+                               Foreground="{StaticResource BrushAccent}"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="登录并授权百度网盘"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource BrushText}"
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0" />
+                    <TextBlock x:Name="StatusHintText"
+                               Text="请在下方扫码或输入百度账号完成授权，授权后将自动关闭窗口"
+                               FontSize="11.5"
+                               Foreground="{StaticResource BrushTextMuted}"
+                               VerticalAlignment="Center"
+                               Margin="12,0,0,0" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,8,0">
+                    <Button Style="{StaticResource CloseTitleBarButton}"
+                            Click="Cancel_Click"
+                            ToolTip="取消"
+                            AutomationProperties.Name="关闭授权窗口">
+                        <TextBlock Text="&#xE8BB;" FontFamily="{StaticResource FontFamilyIcon}" FontSize="10" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- WebView2 登录区 -->
+            <Border Grid.Row="1"
+                    BorderBrush="{StaticResource BrushBorder}"
+                    BorderThickness="0,1,0,1"
+                    Background="#FFFFFF">
+                <wv2:WebView2 x:Name="AuthWebView" />
+            </Border>
+
+            <!-- 底部备用手动授权码栏（若页面直接展示授权码文本时可粘贴） -->
+            <Border Grid.Row="2"
+                    Background="{StaticResource BrushBg1}"
+                    Padding="14,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="手动授权码（备用）："
+                               FontSize="11.5"
+                               Foreground="{StaticResource BrushTextMuted}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <TextBox x:Name="ManualCodeBox"
+                             Grid.Column="1"
+                             Style="{StaticResource InputBox}"
+                             Height="30"
+                             MinHeight="30"
+                             VerticalContentAlignment="Center"
+                             AutomationProperties.Name="手动授权码" />
+                    <Button Grid.Column="2"
+                            Style="{StaticResource SecondaryButton}"
+                            Height="30"
+                            MinHeight="30"
+                            Margin="8,0,0,0"
+                            Click="ConfirmManualCode_Click"
+                            AutomationProperties.Name="确认授权码">
+                        <TextBlock Text="确认授权码" VerticalAlignment="Center" />
+                    </Button>
+                    <Button Grid.Column="3"
+                            Style="{StaticResource GhostButton}"
+                            Height="30"
+                            MinHeight="30"
+                            Margin="6,0,0,0"
+                            Click="Cancel_Click"
+                            AutomationProperties.Name="取消登录">
+                        <TextBlock Text="取消" VerticalAlignment="Center" />
+                    </Button>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

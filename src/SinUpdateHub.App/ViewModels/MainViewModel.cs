@@ -56,6 +56,7 @@ public enum MainPage
     Apps = 0,
     Official,
     Notes,
+    BaiduPan,
     Backup,
     Settings,
 }
@@ -132,6 +133,7 @@ public sealed class MainViewModel : ObservableObject
 
         SettingsPage = new SettingsViewModel(services);
         NotesPage = new NotesViewModel(services);
+        BaiduPanPage = new BaiduPanViewModel(services);
         BackupPage = new BackupViewModel(services);
         BackupPage.BeforeBackup = () => NotesPage.PrepareForBackup();
         BackupPage.DataRestored += ReloadFromStore;
@@ -155,6 +157,8 @@ public sealed class MainViewModel : ObservableObject
         BackupPage.Confirm = (title, message) => Confirm?.Invoke(title, message) ?? false;
         NotesPage.ShowMessage = (title, message) => ShowMessage?.Invoke(title, message);
         NotesPage.Confirm = (title, message) => Confirm?.Invoke(title, message) ?? false;
+        BaiduPanPage.ShowMessage = (title, message) => ShowMessage?.Invoke(title, message);
+        BaiduPanPage.Confirm = (title, message) => Confirm?.Invoke(title, message) ?? false;
 
         CheckAllCommand = new AsyncRelayCommand(CheckAllAsync, () => !IsBusy && Entries.Any(BelongsToCurrentListPage));
         UpdateAllCommand = new AsyncRelayCommand(UpdateAllAsync, () => !IsBusy && UpdatableCount > 0);
@@ -172,6 +176,7 @@ public sealed class MainViewModel : ObservableObject
             new(MainPage.Apps, "软件列表", "\uE8FD"),
             new(MainPage.Official, "软件下载", "\uE774"),
             new(MainPage.Notes, "SinNote", "\uE70B"),
+            new(MainPage.BaiduPan, "百度网盘", "\uE8B7"),
             new(MainPage.Backup, "备份与恢复", "\uE753"),
             new(MainPage.Settings, "设置", "\uE713"),
         };
@@ -223,6 +228,8 @@ public sealed class MainViewModel : ObservableObject
 
     public NotesViewModel NotesPage { get; }
 
+    public BaiduPanViewModel BaiduPanPage { get; }
+
     public BackupViewModel BackupPage { get; }
 
     public MainPage CurrentPage
@@ -242,6 +249,7 @@ public sealed class MainViewModel : ObservableObject
                     nameof(IsOfficialPage),
                     nameof(IsListPage),
                     nameof(IsNotesPage),
+                    nameof(IsBaiduPanPage),
                     nameof(IsBackupPage),
                     nameof(IsSettingsPage),
                     nameof(ShowSourceFilters),
@@ -279,6 +287,7 @@ public sealed class MainViewModel : ObservableObject
     public bool IsOfficialPage => _currentPage == MainPage.Official;
     public bool IsListPage => _currentPage is MainPage.Apps or MainPage.Official;
     public bool IsNotesPage => _currentPage == MainPage.Notes;
+    public bool IsBaiduPanPage => _currentPage == MainPage.BaiduPan;
     public bool IsBackupPage => _currentPage == MainPage.Backup;
     public bool IsSettingsPage => _currentPage == MainPage.Settings;
     public bool ShowSourceFilters => _currentPage == MainPage.Apps;

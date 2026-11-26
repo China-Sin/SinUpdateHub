@@ -149,6 +149,11 @@
                     <views:NotesView x:Name="NotesPageView" DataContext="{Binding NotesPage}" />
                 </Grid>
 
+                <!-- 百度网盘（DataContext = BaiduPanViewModel） -->
+                <Grid Visibility="{Binding IsBaiduPanPage, Converter={StaticResource BoolToVis}}">
+                    <views:BaiduPanView DataContext="{Binding BaiduPanPage}" />
+                </Grid>
+
                 <!-- 备份与恢复（DataContext = BackupViewModel，Visibility 绑定写在外层） -->
                 <Grid Visibility="{Binding IsBackupPage, Converter={StaticResource BoolToVis}}">
                     <views:BackupView DataContext="{Binding BackupPage}" />

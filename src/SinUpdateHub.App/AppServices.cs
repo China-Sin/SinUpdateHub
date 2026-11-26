@@ -37,6 +37,7 @@ public sealed class AppServices
         svc.Downloader = new DownloadService(svc.Network, () => svc.Settings);
         svc.Installer = new InstallerRunner(() => svc.Settings);
         svc.WebDav = new WebDavBackupService(svc.Network, () => svc.Settings);
+        svc.BaiduPan = new BaiduPanService(svc.Network);
 
         AppPaths.EnsureAll(svc.Settings.DownloadDir);
         Current = svc;
@@ -59,6 +60,7 @@ public sealed class AppServices
     public IDownloadService Downloader { get; private set; } = null!;
     public IInstallerRunner Installer { get; private set; } = null!;
     public IWebDavBackupService WebDav { get; private set; } = null!;
+    public BaiduPanService BaiduPan { get; private set; } = null!;
 
     public void SaveSettings()
     {

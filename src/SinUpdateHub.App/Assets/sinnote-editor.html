@@ -1555,6 +1555,14 @@
             emitContentChangedImmediate();
             return;
           }
+
+          // 修复：表格单元格内多行内容（以 <br> 分隔）在第二行行首按 Backspace 时，
+          // Vditor 会误判为“单元格开头”而直接跳到左侧单元格且不删除换行。
+          if (e.key === 'Backspace' && tryDeletePrecedingBrInTableCell()) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
         }
 
         if (selectedImageEl && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'].includes(e.key)) {
@@ -2218,6 +2226,102 @@
         range.collapse(true);
         sel.removeAllRanges();
         sel.addRange(range);
+      }
+
+      // 在表格单元格内按 Backspace 时，若光标紧跟在 <br> 后方，直接删掉该 <br> 将当前行合并回上一行，避免跳到左侧单元格
+      function tryDeletePrecedingBrInTableCell() {
+        const sel = window.getSelection();
+        if (!sel || !sel.isCollapsed || sel.rangeCount === 0) return false;
+        const range = sel.getRangeAt(0);
+        const cell = getClosestTableCell(range.startContainer);
+        if (!cell) return false;
+
+        const isIgnorableNode = (n) => {
+          if (!n) return false;
+          if (n.nodeType === Node.TEXT_NODE) {
+            return (n.nodeValue || '').replace(/\u200B/g, '') === '';
+          }
+          if (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'WBR') {
+            return true;
+          }
+          return false;
+        };
+
+        const findPreviousMeaningful = (node, stopRoot) => {
+          let cur = node;
+          while (cur && cur !== stopRoot) {
+            let prev = cur.previousSibling;
+            while (prev && isIgnorableNode(prev)) {
+              prev = prev.previousSibling;
+            }
+            if (prev) return prev;
+            cur = cur.parentNode;
+          }
+          return null;
+        };
+
+        let targetBr = null;
+        let anchorTextNode = null;
+        let anchorOffset = 0;
+
+        if (range.startContainer.nodeType === Node.TEXT_NODE) {
+          const beforeText = (range.startContainer.nodeValue || '').slice(0, range.startOffset);
+          if (beforeText.replace(/\u200B/g, '') !== '') {
+            return false;
+          }
+          const prev = findPreviousMeaningful(range.startContainer, cell);
+          if (prev && prev.nodeType === Node.ELEMENT_NODE && prev.tagName === 'BR') {
+            targetBr = prev;
+            anchorTextNode = range.startContainer;
+            anchorOffset = range.startOffset;
+          }
+        } else if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+          let idx = range.startOffset - 1;
+          let prev = null;
+          while (idx >= 0) {
+            const candidate = range.startContainer.childNodes[idx];
+            if (!isIgnorableNode(candidate)) {
+              prev = candidate;
+              break;
+            }
+            idx--;
+          }
+          if (!prev) {
+            prev = findPreviousMeaningful(range.startContainer, cell);
+          }
+          if (prev && prev.nodeType === Node.ELEMENT_NODE && prev.tagName === 'BR') {
+            targetBr = prev;
+          }
+        }
+
+        if (!targetBr || !targetBr.parentNode) return false;
+
+        recordUndoSnapshot();
+        const brParent = targetBr.parentNode;
+        const brPrev = targetBr.previousSibling;
+        const brNext = targetBr.nextSibling;
+        brParent.removeChild(targetBr);
+
+        const nextRange = document.createRange();
+        if (brPrev && brPrev.nodeType === Node.TEXT_NODE) {
+          nextRange.setStart(brPrev, brPrev.nodeValue.length);
+          nextRange.collapse(true);
+        } else if (anchorTextNode && cell.contains(anchorTextNode)) {
+          nextRange.setStart(anchorTextNode, Math.min(anchorOffset, (anchorTextNode.nodeValue || '').length));
+          nextRange.collapse(true);
+        } else if (brNext && brNext.nodeType === Node.TEXT_NODE) {
+          nextRange.setStart(brNext, 0);
+          nextRange.collapse(true);
+        } else {
+          nextRange.selectNodeContents(brParent);
+          nextRange.collapse(false);
+        }
+        sel.removeAllRanges();
+        sel.addRange(nextRange);
+
+        recordUndoSnapshot();
+        emitContentChangedImmediate();
+        return true;
       }
 
       function getCurrentTableContext() {

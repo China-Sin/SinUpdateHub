@@ -79,6 +79,30 @@ public sealed class AppSettings
         return (now - LastBackupAt.Value) >= TimeSpan.FromHours(hours);
     }
 
+    // ---------- 百度网盘开放平台 ----------
+    public string BaiduAppKey { get; set; } = string.Empty;
+
+    /// <summary>百度网盘 SecretKey（落盘时经 DPAPI 加密）。</summary>
+    public string BaiduSecretKey { get; set; } = string.Empty;
+
+    /// <summary>百度网盘 OAuth2 AccessToken（落盘时经 DPAPI 加密）。</summary>
+    public string BaiduAccessToken { get; set; } = string.Empty;
+
+    /// <summary>百度网盘 OAuth2 RefreshToken（落盘时经 DPAPI 加密）。</summary>
+    public string BaiduRefreshToken { get; set; } = string.Empty;
+
+    public DateTimeOffset? BaiduTokenExpiresAt { get; set; }
+
+    public string BaiduUserName { get; set; } = string.Empty;
+
+    public int BaiduVipType { get; set; }
+
+    /// <summary>默认浏览的网盘目录（个人开放平台应用默认在 /apps/SinUpdateHub 下）。</summary>
+    public string BaiduDefaultDir { get; set; } = "/apps/SinUpdateHub";
+
+    /// <summary>百度网盘文件下载保存目录（空 = 使用默认下载目录）。</summary>
+    public string BaiduDownloadDir { get; set; } = string.Empty;
+
     // ---------- SinNote 编辑器排版 ----------
     public string NoteFontFamily { get; set; } = DefaultNoteFontFamily;
     public int NoteFontSize { get; set; } = DefaultNoteFontSize;
