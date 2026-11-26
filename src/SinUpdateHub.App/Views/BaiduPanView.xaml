@@ -373,7 +373,7 @@
                                          Height="6"
                                          Minimum="0"
                                          Maximum="100"
-                                         Value="{Binding DownloadProgressPercent}"
+                                         Value="{Binding DownloadProgressPercent, Mode=OneWay}"
                                          Foreground="{StaticResource BrushAccent}"
                                          Background="{StaticResource BrushBg2}"
                                          BorderThickness="0" />
