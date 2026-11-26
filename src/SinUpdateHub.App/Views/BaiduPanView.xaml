@@ -164,13 +164,16 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- 网盘路径栏 -->
+                    <!-- 网盘路径栏 + 全网盘搜索 -->
                     <Grid Grid.Row="0" Margin="0,0,0,10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="220" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
@@ -211,6 +214,88 @@
                                 <TextBlock Style="{StaticResource ButtonGlyph}" Text="&#xE72C;" />
                                 <TextBlock Text="刷新" VerticalAlignment="Center" />
                             </StackPanel>
+                        </Button>
+
+                        <!-- 全网盘搜索框（无双重 Padding + 聚焦隐藏占位字） -->
+                        <Border Grid.Column="6"
+                                Height="34"
+                                Background="{StaticResource BrushBg0}"
+                                CornerRadius="6"
+                                BorderThickness="1"
+                                SnapsToDevicePixels="True">
+                            <Border.Style>
+                                <Style TargetType="{x:Type Border}">
+                                    <Setter Property="BorderBrush" Value="{StaticResource BrushBorder}" />
+                                    <Style.Triggers>
+                                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                            <Setter Property="BorderBrush" Value="{StaticResource BrushAccent}" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="&#xE721;"
+                                           FontFamily="{StaticResource FontFamilyIcon}"
+                                           FontSize="12"
+                                           Foreground="{StaticResource BrushTextMuted}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False" />
+                                <Grid Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="搜索全网盘文件…"
+                                               FontSize="12"
+                                               Foreground="{StaticResource BrushTextMuted}"
+                                               VerticalAlignment="Center"
+                                               IsHitTestVisible="False">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="{Binding SearchKeyword, Converter={StaticResource NullToVis}, ConverterParameter=invert}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsKeyboardFocused, ElementName=BaiduSearchBox}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBox x:Name="BaiduSearchBox"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             Padding="0"
+                                             FontSize="12.5"
+                                             Foreground="{StaticResource BrushText}"
+                                             CaretBrush="{StaticResource BrushText}"
+                                             SelectionBrush="{StaticResource BrushAccent}"
+                                             VerticalContentAlignment="Center"
+                                             FocusVisualStyle="{x:Null}"
+                                             KeyDown="SearchBox_KeyDown"
+                                             Text="{Binding SearchKeyword, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="搜索网盘文件" />
+                                </Grid>
+                                <Button Grid.Column="2"
+                                        Style="{StaticResource IconButtonTiny}"
+                                        Width="20"
+                                        Height="22"
+                                        Content="&#xE711;"
+                                        FontSize="9"
+                                        ToolTip="清除搜索并返回目录"
+                                        Command="{Binding ClearSearchCommand}"
+                                        Visibility="{Binding SearchKeyword, Converter={StaticResource NullToVis}}" />
+                            </Grid>
+                        </Border>
+
+                        <Button Grid.Column="7"
+                                Style="{StaticResource SecondaryButton}"
+                                Margin="6,0,0,0"
+                                Command="{Binding SearchCommand}"
+                                AutomationProperties.Name="搜索网盘">
+                            <TextBlock Text="搜索" VerticalAlignment="Center" />
                         </Button>
                     </Grid>
 
@@ -361,12 +446,17 @@
                                                       Stretch="Uniform"
                                                       VerticalAlignment="Center"
                                                       Margin="0,0,9,0" />
-                                                <TextBlock Grid.Column="2"
-                                                           Text="{Binding Name}"
-                                                           FontSize="13"
-                                                           Foreground="{StaticResource BrushText}"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           VerticalAlignment="Center" />
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}"
+                                                               FontSize="13"
+                                                               Foreground="{StaticResource BrushText}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding ParentDirText}"
+                                                               FontSize="11"
+                                                               Foreground="{StaticResource BrushTextMuted}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Visibility="{Binding ShowParentPath, Converter={StaticResource BoolToVis}}" />
+                                                </StackPanel>
                                                 <TextBlock Grid.Column="3"
                                                            Text="{Binding TypeText}"
                                                            FontSize="11.5"
@@ -463,8 +553,17 @@
                                         Margin="0,0,8,0"
                                         Command="{Binding CancelDownloadCommand}"
                                         Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}"
-                                        AutomationProperties.Name="取消下载">
-                                    <TextBlock Text="取消下载" VerticalAlignment="Center" />
+                                        AutomationProperties.Name="取消传输">
+                                    <TextBlock Text="取消传输" VerticalAlignment="Center" />
+                                </Button>
+                                <Button Style="{StaticResource SecondaryButton}"
+                                        Margin="0,0,8,0"
+                                        Command="{Binding UploadFilesCommand}"
+                                        AutomationProperties.Name="上传文件到当前目录">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource ButtonGlyph}" Text="&#xE898;" />
+                                        <TextBlock Text="上传文件" VerticalAlignment="Center" />
+                                    </StackPanel>
                                 </Button>
                                 <Button Style="{StaticResource SecondaryButton}"
                                         Command="{Binding DownloadSelectedCommand}"

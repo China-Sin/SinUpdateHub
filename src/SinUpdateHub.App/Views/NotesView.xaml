@@ -522,8 +522,18 @@
                                                    Foreground="{StaticResource BrushTextMuted}"
                                                    VerticalAlignment="Center"
                                                    Margin="1,0,0,0"
-                                                   IsHitTestVisible="False"
-                                                   Visibility="{Binding SearchText, Converter={StaticResource NullToVis}, ConverterParameter=invert}" />
+                                                   IsHitTestVisible="False">
+                                            <TextBlock.Style>
+                                                <Style TargetType="{x:Type TextBlock}">
+                                                    <Setter Property="Visibility" Value="{Binding SearchText, Converter={StaticResource NullToVis}, ConverterParameter=invert}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsKeyboardFocused, ElementName=NoteSearchBox}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                     </Grid>
 
                                     <StackPanel Grid.Column="2"
@@ -639,13 +649,14 @@
                                                                                     <ColumnDefinition Width="Auto" />
                                                                                     <ColumnDefinition Width="Auto" />
                                                                                 </Grid.ColumnDefinitions>
-                                                                                <TextBlock Grid.Column="0"
-                                                                                           Text="&#xE8A5;"
-                                                                                           FontFamily="{StaticResource FontFamilyIcon}"
-                                                                                           FontSize="12"
-                                                                                           Foreground="{StaticResource BrushAccent}"
-                                                                                           VerticalAlignment="Center"
-                                                                                           Margin="0,0,7,0" />
+                                                                                <Path Grid.Column="0"
+                                                                                      Data="M14,2H6C4.9,2,4,2.9,4,4v16c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2V8L14,2z M13,9V3.5L18.5,9H13z M8,13h8v1.5H8V13z M8,16h6v1.5H8V16z"
+                                                                                      Fill="{StaticResource BrushAccent}"
+                                                                                      Width="12"
+                                                                                      Height="12"
+                                                                                      Stretch="Uniform"
+                                                                                      VerticalAlignment="Center"
+                                                                                      Margin="0,0,7,0" />
                                                                                 <TextBlock Grid.Column="1"
                                                                                            Text="{Binding PageTitle}"
                                                                                            FontSize="13"

@@ -1,4 +1,7 @@
+using System.Diagnostics;
 using System.Net;
+using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SinUpdateHub.Core.Models;
@@ -8,19 +11,23 @@ namespace SinUpdateHub.Core.Services;
 /// <summary>
 /// 百度网盘官方开放平台服务（OAuth2 + xpan API）：
 /// - 登录：使用用户自行填写的 AppKey / SecretKey + redirect_uri=oob 授权码模式；
-/// - 列表：支持浏览指定网盘目录（默认 /apps/SinUpdateHub）与递归枚举子目录；
-/// - 下载：通过 filemetas(dlink=1) 获取直链，请求时按官方要求携带 User-Agent: pan.baidu.com 与 access_token，
-///         流式写入 .part 临时文件后再原子改名，支持取消与自动刷新过期 Token。
+/// - 列表与搜索：支持目录浏览、递归枚举子目录与全网盘关键字搜索（Token 过期自动续期重试）；
+/// - 下载：filemetas(dlink=1) + User-Agent: pan.baidu.com + HTTP Range 断点续传 + 已存在同大小文件跳过 + 60 秒停滞重试 + 实时网速与 ETA；
+/// - 上传：官方三步分片上传（precreate → superfile2 4MB 分片 → create），支持秒传与实时上传进度。
 /// </summary>
 public sealed class BaiduPanService
 {
     public const string DefaultRedirectUri = "oob";
     public const string DefaultAppRootDir = "/";
     public const string BaiduDownloadUserAgent = "pan.baidu.com";
+    public const int UploadSliceSizeBytes = 4 * 1024 * 1024; // 百度官方标准 4MB 分片
 
     private const int BufferSize = 81920;
     private const int ReportBytes = 256 * 1024;
-    private static readonly TimeSpan ReportInterval = TimeSpan.FromMilliseconds(200);
+    private const int MaxDownloadAttempts = 3;
+    private static readonly TimeSpan ReportInterval = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(60);
 
     private readonly NetworkClientFactory _factory;
 
@@ -100,6 +107,14 @@ public sealed class BaiduPanService
         return raw;
     }
 
+    /// <summary>拼接网盘目录与文件名。</summary>
+    public static string CombineRemotePath(string dir, string fileName)
+    {
+        var normalizedDir = NormalizeRemoteDir(dir);
+        var cleanName = (fileName ?? string.Empty).Trim().Trim('/');
+        return normalizedDir == "/" ? "/" + cleanName : normalizedDir + "/" + cleanName;
+    }
+
     /// <summary>获取上级目录路径。</summary>
     public static string GetParentDir(string? dir)
     {
@@ -111,6 +126,49 @@ public sealed class BaiduPanService
 
         var idx = normalized.LastIndexOf('/');
         return idx <= 0 ? "/" : normalized[..idx];
+    }
+
+    /// <summary>计算文件按 4MB 切片后的每片小写 MD5 列表（供 precreate/create 使用）。</summary>
+    public static async Task<List<string>> ComputeSliceMd5ListAsync(
+        string localFilePath,
+        int sliceSize = UploadSliceSizeBytes,
+        CancellationToken ct = default)
+    {
+        var result = new List<string>();
+        await using var stream = new FileStream(localFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true);
+        if (stream.Length == 0)
+        {
+            result.Add(Convert.ToHexString(MD5.HashData(Array.Empty<byte>())).ToLowerInvariant());
+            return result;
+        }
+
+        var buffer = new byte[Math.Min(sliceSize, (int)Math.Min(stream.Length, sliceSize))];
+        while (stream.Position < stream.Length)
+        {
+            ct.ThrowIfCancellationRequested();
+            var toRead = (int)Math.Min(sliceSize, stream.Length - stream.Position);
+            if (buffer.Length < toRead)
+            {
+                buffer = new byte[toRead];
+            }
+
+            var filled = 0;
+            while (filled < toRead)
+            {
+                var read = await stream.ReadAsync(buffer.AsMemory(filled, toRead - filled), ct).ConfigureAwait(false);
+                if (read <= 0)
+                {
+                    break;
+                }
+
+                filled += read;
+            }
+
+            var hash = MD5.HashData(buffer.AsSpan(0, filled));
+            result.Add(Convert.ToHexString(hash).ToLowerInvariant());
+        }
+
+        return result;
     }
 
     /// <summary>用 OAuth2 授权码 code 换取 access_token 与 refresh_token。</summary>
@@ -221,28 +279,35 @@ public sealed class BaiduPanService
         Action? onSettingsUpdated = null,
         CancellationToken ct = default)
     {
-        var token = await EnsureValidAccessTokenAsync(settings, onSettingsUpdated, forceRefresh: false, ct).ConfigureAwait(false);
-        var url = $"https://pan.baidu.com/rest/2.0/xpan/nas?method=uinfo&access_token={Uri.EscapeDataString(token)}";
-        using var resp = await _factory.Client.GetAsync(url, ct).ConfigureAwait(false);
-        var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        var dto = JsonSerializer.Deserialize<UserInfoDto>(body, JsonConfig.Options)
-                  ?? throw new InvalidOperationException("百度网盘用户信息返回为空");
-
-        if (dto.Errno != 0)
+        return await ExecuteWithTokenRefreshAsync(settings, onSettingsUpdated, async token =>
         {
-            throw new InvalidOperationException(FormatErrno(dto.Errno, dto.ErrMsg));
-        }
+            var url = $"https://pan.baidu.com/rest/2.0/xpan/nas?method=uinfo&access_token={Uri.EscapeDataString(token)}";
+            using var resp = await _factory.Client.GetAsync(url, ct).ConfigureAwait(false);
+            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            var dto = JsonSerializer.Deserialize<UserInfoDto>(body, JsonConfig.Options)
+                      ?? throw new InvalidOperationException("百度网盘用户信息返回为空");
 
-        return new BaiduUserInfo
-        {
-            Uk = dto.Uk,
-            BaiduName = dto.BaiduName ?? string.Empty,
-            NetdiskName = dto.NetdiskName ?? string.Empty,
-            VipType = dto.VipType,
-        };
+            if (dto.Errno is -6 or 111)
+            {
+                throw new BaiduTokenExpiredException();
+            }
+
+            if (dto.Errno != 0)
+            {
+                throw new InvalidOperationException(FormatErrno(dto.Errno, dto.ErrMsg));
+            }
+
+            return new BaiduUserInfo
+            {
+                Uk = dto.Uk,
+                BaiduName = dto.BaiduName ?? string.Empty,
+                NetdiskName = dto.NetdiskName ?? string.Empty,
+                VipType = dto.VipType,
+            };
+        }, ct).ConfigureAwait(false);
     }
 
-    /// <summary>列出指定网盘目录下的全部文件与子文件夹（自动分页）。</summary>
+    /// <summary>列出指定网盘目录下的全部文件与子文件夹（自动分页 + Token 过期续期重试）。</summary>
     public async Task<List<BaiduFileEntry>> ListFilesAsync(
         AppSettings settings,
         string dir,
@@ -250,17 +315,57 @@ public sealed class BaiduPanService
         CancellationToken ct = default)
     {
         var normalizedDir = NormalizeRemoteDir(dir);
-        var token = await EnsureValidAccessTokenAsync(settings, onSettingsUpdated, forceRefresh: false, ct).ConfigureAwait(false);
+        return await ExecuteWithTokenRefreshAsync(
+            settings,
+            onSettingsUpdated,
+            token => ListFilesCoreAsync(token, normalizedDir, ct),
+            ct).ConfigureAwait(false);
+    }
 
-        try
+    /// <summary>在网盘指定目录下递归搜索文件名包含关键字的文件与文件夹（默认全网盘 / 搜索）。</summary>
+    public async Task<List<BaiduFileEntry>> SearchFilesAsync(
+        AppSettings settings,
+        string keyword,
+        string dir = "/",
+        Action? onSettingsUpdated = null,
+        CancellationToken ct = default)
+    {
+        var key = (keyword ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(key))
         {
-            return await ListFilesCoreAsync(token, normalizedDir, ct).ConfigureAwait(false);
+            return new List<BaiduFileEntry>();
         }
-        catch (BaiduTokenExpiredException)
+
+        var normalizedDir = NormalizeRemoteDir(dir);
+        return await ExecuteWithTokenRefreshAsync(settings, onSettingsUpdated, async token =>
         {
-            token = await EnsureValidAccessTokenAsync(settings, onSettingsUpdated, forceRefresh: true, ct).ConfigureAwait(false);
-            return await ListFilesCoreAsync(token, normalizedDir, ct).ConfigureAwait(false);
-        }
+            var url = "https://pan.baidu.com/rest/2.0/xpan/file?method=search"
+                      + $"&key={Uri.EscapeDataString(key)}"
+                      + $"&dir={Uri.EscapeDataString(normalizedDir)}"
+                      + "&recursion=1&page=1&num=500&web=0"
+                      + $"&access_token={Uri.EscapeDataString(token)}";
+
+            using var resp = await _factory.Client.GetAsync(url, ct).ConfigureAwait(false);
+            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            var dto = JsonSerializer.Deserialize<FileListResponseDto>(body, JsonConfig.Options)
+                      ?? throw new InvalidOperationException("搜索网盘文件失败：响应为空");
+
+            if (dto.Errno is -6 or 111)
+            {
+                throw new BaiduTokenExpiredException();
+            }
+
+            if (dto.Errno != 0)
+            {
+                throw new InvalidOperationException(FormatErrno(dto.Errno, dto.ErrMsg));
+            }
+
+            return (dto.List ?? new List<FileItemDto>())
+                .Select(MapFileEntry)
+                .OrderByDescending(f => f.IsDir)
+                .ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }, ct).ConfigureAwait(false);
     }
 
     /// <summary>递归收集选中文件与文件夹内的所有文件（保留相对子目录结构）。</summary>
@@ -322,7 +427,7 @@ public sealed class BaiduPanService
         return results;
     }
 
-    /// <summary>批量查询文件下载直链 dlink（自动按每批 100 个切分）。</summary>
+    /// <summary>批量查询文件下载直链 dlink（每批 100 个，支持 Token 过期自动续期重试）。</summary>
     public async Task<Dictionary<long, string>> GetDownloadLinksAsync(
         AppSettings settings,
         IReadOnlyList<long> fsIds,
@@ -335,61 +440,86 @@ public sealed class BaiduPanService
             return result;
         }
 
-        var token = await EnsureValidAccessTokenAsync(settings, onSettingsUpdated, forceRefresh: false, ct).ConfigureAwait(false);
         const int batchSize = 100;
         for (var i = 0; i < fsIds.Count; i += batchSize)
         {
             var chunk = fsIds.Skip(i).Take(batchSize).ToList();
-            var idArrayJson = "[" + string.Join(",", chunk) + "]";
-            var url = "https://pan.baidu.com/rest/2.0/xpan/multimedia?method=filemetas"
-                      + $"&fsids={Uri.EscapeDataString(idArrayJson)}"
-                      + "&dlink=1"
-                      + $"&access_token={Uri.EscapeDataString(token)}";
-
-            using var resp = await _factory.Client.GetAsync(url, ct).ConfigureAwait(false);
-            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            var dto = JsonSerializer.Deserialize<FileMetasResponseDto>(body, JsonConfig.Options)
-                      ?? throw new InvalidOperationException("获取百度网盘下载链接失败：响应为空");
-
-            if (dto.Errno != 0)
+            var chunkMap = await ExecuteWithTokenRefreshAsync(settings, onSettingsUpdated, async token =>
             {
-                throw new InvalidOperationException(FormatErrno(dto.Errno, dto.ErrMsg));
-            }
+                var idArrayJson = "[" + string.Join(",", chunk) + "]";
+                var url = "https://pan.baidu.com/rest/2.0/xpan/multimedia?method=filemetas"
+                          + $"&fsids={Uri.EscapeDataString(idArrayJson)}"
+                          + "&dlink=1"
+                          + $"&access_token={Uri.EscapeDataString(token)}";
 
-            if (dto.List is null)
-            {
-                continue;
-            }
+                using var resp = await _factory.Client.GetAsync(url, ct).ConfigureAwait(false);
+                var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                var dto = JsonSerializer.Deserialize<FileMetasResponseDto>(body, JsonConfig.Options)
+                          ?? throw new InvalidOperationException("获取百度网盘下载链接失败：响应为空");
 
-            foreach (var item in dto.List)
-            {
-                if (!string.IsNullOrWhiteSpace(item.Dlink))
+                if (dto.Errno is -6 or 111)
                 {
-                    result[item.FsId] = item.Dlink.Trim();
+                    throw new BaiduTokenExpiredException();
                 }
+
+                if (dto.Errno != 0)
+                {
+                    throw new InvalidOperationException(FormatErrno(dto.Errno, dto.ErrMsg));
+                }
+
+                var map = new Dictionary<long, string>();
+                if (dto.List is not null)
+                {
+                    foreach (var item in dto.List)
+                    {
+                        if (!string.IsNullOrWhiteSpace(item.Dlink))
+                        {
+                            map[item.FsId] = item.Dlink.Trim();
+                        }
+                    }
+                }
+
+                return map;
+            }, ct).ConfigureAwait(false);
+
+            foreach (var kv in chunkMap)
+            {
+                result[kv.Key] = kv.Value;
             }
         }
 
         return result;
     }
 
-    /// <summary>构造百度网盘 dlink 下载请求（自动拼接 access_token 并附加官方要求的 User-Agent: pan.baidu.com）。</summary>
-    internal static HttpRequestMessage CreateDlinkDownloadRequest(string dlink, string accessToken)
+    /// <summary>构造百度网盘 dlink 下载请求（自动拼接 access_token、附加 User-Agent: pan.baidu.com，支持 HTTP Range 断点续传）。</summary>
+    internal static HttpRequestMessage CreateDlinkDownloadRequest(string dlink, string accessToken, long resumeFromBytes = 0)
     {
         var sep = dlink.Contains('?', StringComparison.Ordinal) ? "&" : "?";
         var fullUrl = $"{dlink}{sep}access_token={Uri.EscapeDataString(accessToken)}";
         var req = new HttpRequestMessage(HttpMethod.Get, fullUrl);
         req.Headers.UserAgent.Clear();
         req.Headers.TryAddWithoutValidation("User-Agent", BaiduDownloadUserAgent);
+        if (resumeFromBytes > 0)
+        {
+            req.Headers.Range = new RangeHeaderValue(resumeFromBytes, null);
+        }
+
         return req;
     }
 
-    /// <summary>下载单个百度网盘文件到指定本地路径（.part 临时文件 + 原子改名）。</summary>
-    public async Task<string> DownloadFileAsync(
+    /// <summary>
+    /// 下载单个百度网盘文件到指定本地路径：
+    /// - 若本地目标文件已存在且大小一致则直接跳过；
+    /// - 若存在未下完的 .part 临时文件则自动发送 HTTP Range 断点续传；
+    /// - 采用无限总时长客户端 + 单次读流 60 秒停滞检测 + 最多 3 次自动断点重试；
+    /// - 中途取消或断网会保留 .part 文件以便下次续传。
+    /// </summary>
+    public async Task<BaiduDownloadFileResult> DownloadFileAsync(
         AppSettings settings,
         string dlink,
         string targetLocalPath,
-        IProgress<DownloadProgress>? progress = null,
+        long expectedSize = 0,
+        IProgress<BaiduTransferProgress>? progress = null,
         Action? onSettingsUpdated = null,
         CancellationToken ct = default)
     {
@@ -398,7 +528,6 @@ public sealed class BaiduPanService
             throw new InvalidOperationException("下载链接为空");
         }
 
-        var token = await EnsureValidAccessTokenAsync(settings, onSettingsUpdated, forceRefresh: false, ct).ConfigureAwait(false);
         var fullPath = Path.GetFullPath(targetLocalPath);
         var dir = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrWhiteSpace(dir))
@@ -406,80 +535,382 @@ public sealed class BaiduPanService
             Directory.CreateDirectory(dir);
         }
 
-        var partPath = fullPath + ".part";
-        using var req = CreateDlinkDownloadRequest(dlink, token);
-        using var resp = await _factory.DownloadClient
-            .SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct)
-            .ConfigureAwait(false);
-
-        if (!resp.IsSuccessStatusCode)
+        // 本地已存在同大小完整文件：直接跳过，避免重复下载数 GB 大文件
+        if (expectedSize > 0 && File.Exists(fullPath) && new FileInfo(fullPath).Length == expectedSize)
         {
-            throw new InvalidOperationException($"百度网盘下载失败（HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}）");
+            progress?.Report(new BaiduTransferProgress
+            {
+                TransferredBytes = expectedSize,
+                TotalBytes = expectedSize,
+                Fraction = 1,
+                Message = "本地已存在，已跳过",
+            });
+            return new BaiduDownloadFileResult
+            {
+                LocalPath = fullPath,
+                SkippedExisting = true,
+            };
         }
 
-        var totalBytes = resp.Content.Headers.ContentLength;
-        try
+        var partPath = fullPath + ".part";
+        var streamClient = _factory.GetClient(Timeout.InfiniteTimeSpan);
+        Exception? lastError = null;
+
+        for (var attempt = 1; attempt <= MaxDownloadAttempts; attempt++)
         {
-            await using (var remoteStream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
-            await using (var localStream = new FileStream(partPath, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize, useAsync: true))
+            ct.ThrowIfCancellationRequested();
+            var token = await EnsureValidAccessTokenAsync(settings, onSettingsUpdated, forceRefresh: false, ct).ConfigureAwait(false);
+            long resumeFrom = 0;
+            if (File.Exists(partPath))
             {
-                var buffer = new byte[BufferSize];
-                long received = 0;
-                long lastReportedBytes = 0;
-                var lastReportAt = DateTimeOffset.UtcNow;
-
-                while (true)
+                var partLen = new FileInfo(partPath).Length;
+                if (partLen > 0 && (expectedSize <= 0 || partLen < expectedSize))
                 {
-                    var read = await remoteStream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct).ConfigureAwait(false);
-                    if (read <= 0)
-                    {
-                        break;
-                    }
-
-                    await localStream.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
-                    received += read;
-
-                    var now = DateTimeOffset.UtcNow;
-                    if (received - lastReportedBytes >= ReportBytes || now - lastReportAt >= ReportInterval)
-                    {
-                        lastReportedBytes = received;
-                        lastReportAt = now;
-                        progress?.Report(new DownloadProgress
-                        {
-                            Received = received,
-                            Total = totalBytes,
-                            Fraction = totalBytes is > 0 ? Math.Clamp((double)received / totalBytes.Value, 0, 1) : 0,
-                        });
-                    }
+                    resumeFrom = partLen;
                 }
-
-                progress?.Report(new DownloadProgress
+                else if (expectedSize > 0 && partLen >= expectedSize)
                 {
-                    Received = received,
-                    Total = totalBytes ?? received,
-                    Fraction = 1,
+                    // 异常残余大于目标体积时清掉重下
+                    TryDeleteFile(partPath);
+                }
+            }
+
+            if (attempt > 1)
+            {
+                progress?.Report(new BaiduTransferProgress
+                {
+                    TransferredBytes = resumeFrom,
+                    TotalBytes = expectedSize > 0 ? expectedSize : null,
+                    Fraction = expectedSize > 0 ? Math.Clamp((double)resumeFrom / expectedSize, 0, 1) : 0,
+                    IsResumed = resumeFrom > 0,
+                    Message = $"网络波动，正在自动断点重试（第 {attempt}/{MaxDownloadAttempts} 次）…",
                 });
             }
 
-            File.Move(partPath, fullPath, overwrite: true);
-            return fullPath;
-        }
-        catch
-        {
             try
             {
-                if (File.Exists(partPath))
+                using var stallCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                stallCts.CancelAfter(ConnectTimeout);
+
+                using var req = CreateDlinkDownloadRequest(dlink, token, resumeFrom);
+                using var resp = await streamClient
+                    .SendAsync(req, HttpCompletionOption.ResponseHeadersRead, stallCts.Token)
+                    .ConfigureAwait(false);
+
+                if (resp.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable && resumeFrom > 0)
                 {
-                    File.Delete(partPath);
+                    // 服务端不支持当前 Range 偏移，删掉 .part 重下
+                    TryDeleteFile(partPath);
+                    continue;
                 }
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"百度网盘下载失败（HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}）");
+                }
+
+                var isPartial = resp.StatusCode == HttpStatusCode.PartialContent && resumeFrom > 0;
+                var startOffset = isPartial ? resumeFrom : 0;
+                var fileMode = isPartial ? FileMode.Append : FileMode.Create;
+
+                long? totalBytes = resp.Content.Headers.ContentRange?.Length
+                    ?? (resp.Content.Headers.ContentLength is long cl ? startOffset + cl : (expectedSize > 0 ? expectedSize : null));
+
+                var sw = Stopwatch.StartNew();
+                var sessionBytes = 0L;
+                var received = startOffset;
+                var lastReportedBytes = startOffset;
+                var lastReportAt = sw.Elapsed;
+
+                await using (var remoteStream = await resp.Content.ReadAsStreamAsync(stallCts.Token).ConfigureAwait(false))
+                await using (var localStream = new FileStream(partPath, fileMode, FileAccess.Write, FileShare.None, BufferSize, useAsync: true))
+                {
+                    var buffer = new byte[BufferSize];
+                    while (true)
+                    {
+                        stallCts.CancelAfter(StallTimeout);
+                        var read = await remoteStream.ReadAsync(buffer.AsMemory(0, buffer.Length), stallCts.Token).ConfigureAwait(false);
+                        if (read <= 0)
+                        {
+                            break;
+                        }
+
+                        await localStream.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                        received += read;
+                        sessionBytes += read;
+
+                        var elapsed = sw.Elapsed;
+                        if (received - lastReportedBytes >= ReportBytes || elapsed - lastReportAt >= ReportInterval)
+                        {
+                            lastReportedBytes = received;
+                            lastReportAt = elapsed;
+                            var speed = elapsed.TotalSeconds > 0.15 ? sessionBytes / elapsed.TotalSeconds : 0;
+                            TimeSpan? eta = totalBytes is > 0 && speed > 1024 && received < totalBytes.Value
+                                ? TimeSpan.FromSeconds((totalBytes.Value - received) / speed)
+                                : null;
+
+                            progress?.Report(new BaiduTransferProgress
+                            {
+                                TransferredBytes = received,
+                                TotalBytes = totalBytes,
+                                Fraction = totalBytes is > 0 ? Math.Clamp((double)received / totalBytes.Value, 0, 1) : 0,
+                                BytesPerSecond = speed,
+                                EstimatedRemaining = eta,
+                                IsResumed = isPartial,
+                            });
+                        }
+                    }
+
+                    progress?.Report(new BaiduTransferProgress
+                    {
+                        TransferredBytes = received,
+                        TotalBytes = totalBytes ?? received,
+                        Fraction = 1,
+                        BytesPerSecond = sw.Elapsed.TotalSeconds > 0.1 ? sessionBytes / sw.Elapsed.TotalSeconds : 0,
+                        EstimatedRemaining = TimeSpan.Zero,
+                        IsResumed = isPartial,
+                    });
+                }
+
+                File.Move(partPath, fullPath, overwrite: true);
+                return new BaiduDownloadFileResult
+                {
+                    LocalPath = fullPath,
+                    SkippedExisting = false,
+                    ResumedFromBytes = startOffset,
+                };
             }
-            catch
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                // ignore cleanup failure
+                // 用户主动取消：保留 .part 供下次断点续传
+                throw;
+            }
+            catch (Exception ex) when (attempt < MaxDownloadAttempts && (ex is OperationCanceledException or HttpRequestException or IOException))
+            {
+                lastError = ex;
+                AppLog.Write($"百度网盘下载第 {attempt} 次尝试中断（已保留 .part 准备续传）：{fullPath}", ex);
+                await Task.Delay(TimeSpan.FromMilliseconds(1500 * attempt), ct).ConfigureAwait(false);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"下载失败（已重试 {MaxDownloadAttempts} 次，未完成进度已保留，再次下载将自动续传）：{lastError?.Message}",
+            lastError);
+    }
+
+    /// <summary>
+    /// 使用百度官方三步分片协议（precreate → superfile2 → create）上传单个本地文件到网盘指定目录。
+    /// </summary>
+    public async Task<BaiduUploadFileResult> UploadFileAsync(
+        AppSettings settings,
+        string localFilePath,
+        string remoteDir,
+        IProgress<BaiduTransferProgress>? progress = null,
+        Action? onSettingsUpdated = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(localFilePath) || !File.Exists(localFilePath))
+        {
+            throw new FileNotFoundException("找不到要上传的本地文件", localFilePath);
+        }
+
+        var fileInfo = new FileInfo(localFilePath);
+        var fileSize = fileInfo.Length;
+        var remotePath = CombineRemotePath(remoteDir, fileInfo.Name);
+
+        progress?.Report(new BaiduTransferProgress
+        {
+            TransferredBytes = 0,
+            TotalBytes = fileSize,
+            Fraction = 0,
+            Message = "正在计算文件分片校验…",
+        });
+
+        var sliceMd5s = await ComputeSliceMd5ListAsync(localFilePath, UploadSliceSizeBytes, ct).ConfigureAwait(false);
+        var blockListJson = JsonSerializer.Serialize(sliceMd5s);
+
+        // 1. 预上传 precreate（检测是否秒传并获取 uploadid）
+        var precreate = await ExecuteWithTokenRefreshAsync(settings, onSettingsUpdated, async token =>
+        {
+            var url = $"https://pan.baidu.com/rest/2.0/xpan/file?method=precreate&access_token={Uri.EscapeDataString(token)}";
+            using var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["path"] = remotePath,
+                ["size"] = fileSize.ToString(),
+                ["isdir"] = "0",
+                ["autoinit"] = "1",
+                ["rtype"] = "1",
+                ["block_list"] = blockListJson,
+            });
+            using var resp = await _factory.Client.PostAsync(url, content, ct).ConfigureAwait(false);
+            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            var dto = JsonSerializer.Deserialize<PrecreateResponseDto>(body, JsonConfig.Options)
+                      ?? throw new InvalidOperationException("预上传响应为空");
+
+            if (dto.Errno is -6 or 111)
+            {
+                throw new BaiduTokenExpiredException();
             }
 
-            throw;
+            if (dto.Errno != 0)
+            {
+                throw new InvalidOperationException(FormatErrno(dto.Errno, dto.ErrMsg));
+            }
+
+            return dto;
+        }, ct).ConfigureAwait(false);
+
+        if (precreate.ReturnType == 2)
+        {
+            progress?.Report(new BaiduTransferProgress
+            {
+                TransferredBytes = fileSize,
+                TotalBytes = fileSize,
+                Fraction = 1,
+                Message = "云端秒传成功",
+            });
+            return new BaiduUploadFileResult
+            {
+                RemotePath = remotePath,
+                InstantUploaded = true,
+                TotalBytes = fileSize,
+            };
         }
+
+        if (string.IsNullOrWhiteSpace(precreate.UploadId))
+        {
+            throw new InvalidOperationException("预上传未返回 uploadid，无法继续分片上传");
+        }
+
+        // 2. 分片上传 superfile2（每片 4MB，multipart/form-data）
+        var neededParts = precreate.BlockList is { Count: > 0 }
+            ? precreate.BlockList
+            : Enumerable.Range(0, sliceMd5s.Count).ToList();
+
+        var uploadClient = _factory.GetClient(TimeSpan.FromMinutes(10));
+        var uploadedMd5s = sliceMd5s.ToList();
+        var sw = Stopwatch.StartNew();
+        long uploadedBytes = 0;
+
+        await using (var fs = new FileStream(localFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true))
+        {
+            foreach (var partSeq in neededParts)
+            {
+                ct.ThrowIfCancellationRequested();
+                var offset = (long)partSeq * UploadSliceSizeBytes;
+                var partLen = fileSize == 0 ? 0 : (int)Math.Min(UploadSliceSizeBytes, Math.Max(0, fileSize - offset));
+                var sliceBytes = new byte[partLen];
+
+                if (partLen > 0)
+                {
+                    fs.Seek(offset, SeekOrigin.Begin);
+                    var filled = 0;
+                    while (filled < partLen)
+                    {
+                        var read = await fs.ReadAsync(sliceBytes.AsMemory(filled, partLen - filled), ct).ConfigureAwait(false);
+                        if (read <= 0)
+                        {
+                            break;
+                        }
+
+                        filled += read;
+                    }
+                }
+
+                var partMd5 = await ExecuteWithTokenRefreshAsync(settings, onSettingsUpdated, async token =>
+                {
+                    var uploadUrl = "https://d.pcs.baidu.com/rest/2.0/pcs/superfile2?method=upload"
+                                    + $"&access_token={Uri.EscapeDataString(token)}"
+                                    + "&type=tmpfile"
+                                    + $"&path={Uri.EscapeDataString(remotePath)}"
+                                    + $"&uploadid={Uri.EscapeDataString(precreate.UploadId)}"
+                                    + $"&partseq={partSeq}";
+
+                    using var form = new MultipartFormDataContent();
+                    using var fileContent = new ByteArrayContent(sliceBytes);
+                    fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                    form.Add(fileContent, "file", fileInfo.Name);
+
+                    using var resp = await uploadClient.PostAsync(uploadUrl, form, ct).ConfigureAwait(false);
+                    var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    var dto = JsonSerializer.Deserialize<SuperfileUploadResponseDto>(body, JsonConfig.Options)
+                              ?? throw new InvalidOperationException($"分片 {partSeq} 上传响应为空");
+
+                    if (dto.ErrorCode is -6 or 111)
+                    {
+                        throw new BaiduTokenExpiredException();
+                    }
+
+                    if (dto.ErrorCode != 0 || string.IsNullOrWhiteSpace(dto.Md5))
+                    {
+                        throw new InvalidOperationException(
+                            $"分片 {partSeq + 1}/{sliceMd5s.Count} 上传失败：{dto.ErrorMsg ?? $"error_code={dto.ErrorCode}"}");
+                    }
+
+                    return dto.Md5.Trim();
+                }, ct).ConfigureAwait(false);
+
+                if (partSeq >= 0 && partSeq < uploadedMd5s.Count)
+                {
+                    uploadedMd5s[partSeq] = partMd5;
+                }
+
+                uploadedBytes += partLen;
+                var speed = sw.Elapsed.TotalSeconds > 0.1 ? uploadedBytes / sw.Elapsed.TotalSeconds : 0;
+                TimeSpan? eta = fileSize > 0 && speed > 1024 && uploadedBytes < fileSize
+                    ? TimeSpan.FromSeconds((fileSize - uploadedBytes) / speed)
+                    : null;
+
+                progress?.Report(new BaiduTransferProgress
+                {
+                    TransferredBytes = Math.Min(uploadedBytes, fileSize),
+                    TotalBytes = fileSize,
+                    Fraction = fileSize > 0 ? Math.Clamp((double)uploadedBytes / fileSize, 0, 1) : 1,
+                    BytesPerSecond = speed,
+                    EstimatedRemaining = eta,
+                });
+            }
+        }
+
+        // 3. 合并创建文件 create
+        var finalBlockListJson = JsonSerializer.Serialize(uploadedMd5s);
+        var createdPath = await ExecuteWithTokenRefreshAsync(settings, onSettingsUpdated, async token =>
+        {
+            var createUrl = $"https://pan.baidu.com/rest/2.0/xpan/file?method=create&access_token={Uri.EscapeDataString(token)}";
+            using var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["path"] = remotePath,
+                ["size"] = fileSize.ToString(),
+                ["isdir"] = "0",
+                ["uploadid"] = precreate.UploadId,
+                ["block_list"] = finalBlockListJson,
+                ["rtype"] = "1",
+            });
+
+            using var resp = await _factory.Client.PostAsync(createUrl, content, ct).ConfigureAwait(false);
+            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            var dto = JsonSerializer.Deserialize<CreateFileResponseDto>(body, JsonConfig.Options)
+                      ?? throw new InvalidOperationException("合并文件响应为空");
+
+            if (dto.Errno is -6 or 111)
+            {
+                throw new BaiduTokenExpiredException();
+            }
+
+            if (dto.Errno != 0)
+            {
+                throw new InvalidOperationException(FormatErrno(dto.Errno, dto.ErrMsg));
+            }
+
+            return string.IsNullOrWhiteSpace(dto.Path) ? remotePath : dto.Path;
+        }, ct).ConfigureAwait(false);
+
+        return new BaiduUploadFileResult
+        {
+            RemotePath = createdPath,
+            InstantUploaded = false,
+            TotalBytes = fileSize,
+        };
     }
 
     /// <summary>格式化百度网盘 API 错误码为易懂的中文提示。</summary>
@@ -487,14 +918,34 @@ public sealed class BaiduPanService
     {
         -6 or 111 => "百度网盘登录已过期或权限不足，请重新登录授权（错误码 " + errno + "）",
         -7 => "文件名或路径格式非法（错误码 -7）",
-        -9 => "网盘目录不存在（个人应用默认仅可访问 /apps/<你的应用名>/ 目录，请确认路径已存在）",
+        -8 => "云端已存在同名文件或目录（错误码 -8）",
+        -9 => "网盘目录不存在，请确认路径正确（错误码 -9）",
         2 => "请求参数错误（错误码 2）",
+        10 => "创建文件失败，请确认目标目录有写入权限（错误码 10）",
         31034 => "请求过于频繁，触发百度网盘流控，请稍后再试（错误码 31034）",
         31326 => "触发防盗链校验，下载链接已失效，请重新尝试（错误码 31326）",
         _ => string.IsNullOrWhiteSpace(fallbackMsg)
             ? $"百度网盘接口返回错误（errno={errno}）"
             : $"百度网盘接口错误（errno={errno}）：{fallbackMsg}",
     };
+
+    private async Task<T> ExecuteWithTokenRefreshAsync<T>(
+        AppSettings settings,
+        Action? onSettingsUpdated,
+        Func<string, Task<T>> operation,
+        CancellationToken ct)
+    {
+        var token = await EnsureValidAccessTokenAsync(settings, onSettingsUpdated, forceRefresh: false, ct).ConfigureAwait(false);
+        try
+        {
+            return await operation(token).ConfigureAwait(false);
+        }
+        catch (BaiduTokenExpiredException)
+        {
+            token = await EnsureValidAccessTokenAsync(settings, onSettingsUpdated, forceRefresh: true, ct).ConfigureAwait(false);
+            return await operation(token).ConfigureAwait(false);
+        }
+    }
 
     private async Task<BaiduTokenResult> RequestTokenAsync(string url, CancellationToken ct)
     {
@@ -559,17 +1010,7 @@ public sealed class BaiduPanService
 
             foreach (var item in page)
             {
-                result.Add(new BaiduFileEntry
-                {
-                    FsId = item.FsId,
-                    Path = item.Path ?? string.Empty,
-                    Name = item.ServerFilename ?? string.Empty,
-                    IsDir = item.IsDir == 1,
-                    Size = item.Size,
-                    ModifiedAt = item.ServerMtime > 0
-                        ? DateTimeOffset.FromUnixTimeSeconds(item.ServerMtime)
-                        : DateTimeOffset.Now,
-                });
+                result.Add(MapFileEntry(item));
             }
 
             if (page.Count < limit)
@@ -586,6 +1027,18 @@ public sealed class BaiduPanService
             .ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    private static BaiduFileEntry MapFileEntry(FileItemDto item) => new()
+    {
+        FsId = item.FsId,
+        Path = item.Path ?? string.Empty,
+        Name = item.ServerFilename ?? string.Empty,
+        IsDir = item.IsDir == 1,
+        Size = item.Size,
+        ModifiedAt = item.ServerMtime > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(item.ServerMtime)
+            : DateTimeOffset.Now,
+    };
 
     private static string ComputeRelativePath(string baseDir, string remotePath, string fallbackFileName)
     {
@@ -624,6 +1077,21 @@ public sealed class BaiduPanService
         }
 
         return null;
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // ignore cleanup errors
+        }
     }
 
     private sealed class BaiduTokenExpiredException : Exception
@@ -724,5 +1192,47 @@ public sealed class BaiduPanService
 
         [JsonPropertyName("dlink")]
         public string? Dlink { get; set; }
+    }
+
+    private sealed class PrecreateResponseDto
+    {
+        [JsonPropertyName("errno")]
+        public int Errno { get; set; }
+
+        [JsonPropertyName("errmsg")]
+        public string? ErrMsg { get; set; }
+
+        [JsonPropertyName("uploadid")]
+        public string? UploadId { get; set; }
+
+        [JsonPropertyName("return_type")]
+        public int ReturnType { get; set; }
+
+        [JsonPropertyName("block_list")]
+        public List<int>? BlockList { get; set; }
+    }
+
+    private sealed class SuperfileUploadResponseDto
+    {
+        [JsonPropertyName("md5")]
+        public string? Md5 { get; set; }
+
+        [JsonPropertyName("error_code")]
+        public int ErrorCode { get; set; }
+
+        [JsonPropertyName("error_msg")]
+        public string? ErrorMsg { get; set; }
+    }
+
+    private sealed class CreateFileResponseDto
+    {
+        [JsonPropertyName("errno")]
+        public int Errno { get; set; }
+
+        [JsonPropertyName("errmsg")]
+        public string? ErrMsg { get; set; }
+
+        [JsonPropertyName("path")]
+        public string? Path { get; set; }
     }
 }

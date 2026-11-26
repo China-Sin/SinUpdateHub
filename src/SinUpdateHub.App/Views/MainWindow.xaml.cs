@@ -35,6 +35,7 @@ public partial class MainWindow : Window
         _viewModel.NotesPage.OpenTrashRequested = ShowNoteTrash;
         _viewModel.BaiduPanPage.AuthorizeBaiduRequested = ShowBaiduAuth;
         _viewModel.BaiduPanPage.PickFolderRequested = ShowFolderPicker;
+        _viewModel.BaiduPanPage.PickFilesRequested = ShowFilesPicker;
         _viewModel.BackupPage.SelectRestoreItems = ShowRestoreSelection;
 
         DataContext = _viewModel;
@@ -52,10 +53,15 @@ public partial class MainWindow : Window
 
         SourceInitialized += (_, _) => AttachMaximizedWorkAreaHook();
         Loaded += async (_, _) => await _viewModel.InitializeAsync();
+        Deactivated += (_, _) => _viewModel.NotesPage.IsSearchDropdownOpen = false;
+        LocationChanged += (_, _) => _viewModel.NotesPage.IsSearchDropdownOpen = false;
+        StateChanged += (_, _) => _viewModel.NotesPage.IsSearchDropdownOpen = false;
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         Closing += (_, _) =>
         {
+            _viewModel.NotesPage.IsSearchDropdownOpen = false;
             _viewModel.NotesPage.FlushPendingSave();
+            _viewModel.BaiduPanPage.CancelTransfer();
             SaveWindowState();
         };
     }
@@ -185,6 +191,17 @@ public partial class MainWindow : Window
             InitialDirectory = System.IO.Directory.Exists(initialDirectory) ? initialDirectory : string.Empty,
         };
         return dialog.ShowDialog(this) == true ? dialog.FolderName : null;
+    }
+
+    private string[]? ShowFilesPicker()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择要上传到百度网盘的本地文件",
+            Multiselect = true,
+            CheckFileExists = true,
+        };
+        return dialog.ShowDialog(this) == true ? dialog.FileNames : null;
     }
 
     private RestoreSelectionResult? ShowRestoreSelection(string sourceName, AppData incomingData)

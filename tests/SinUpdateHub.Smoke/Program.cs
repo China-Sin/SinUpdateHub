@@ -1734,13 +1734,38 @@ internal sealed class SmokeRunner
                 && parentDir == "/apps/SinUpdateHub"
                 && dlinkReq.Headers.UserAgent.ToString() == "pan.baidu.com"
                 && dlinkReq.RequestUri!.AbsoluteUri.Contains("access_token=tok_test_123", StringComparison.Ordinal)
+                && !baiduRawJson.Contains("my_app_key", StringComparison.Ordinal)
                 && !baiduRawJson.Contains("my_secret_key_999", StringComparison.Ordinal)
                 && !baiduRawJson.Contains("my_access_token_888", StringComparison.Ordinal)
                 && !baiduRawJson.Contains("my_refresh_token_777", StringComparison.Ordinal)
+                && baiduLoaded.BaiduAppKey == "my_app_key"
                 && baiduLoaded.BaiduSecretKey == "my_secret_key_999"
                 && baiduLoaded.BaiduAccessToken == "my_access_token_888"
                 && baiduLoaded.BaiduRefreshToken == "my_refresh_token_777",
                 $"normDir={normDir}, parent={parentDir}, ua={dlinkReq.Headers.UserAgent}");
+
+            // 17) 百度网盘：HTTP Range 断点续传请求头、分片 MD5 计算与本地已存在同大小文件跳过
+            using var rangeReq = BaiduPanService.CreateDlinkDownloadRequest("https://d.pcs.baidu.com/file/iso", "tok_range", resumeFromBytes: 4096);
+            var sliceTestFile = Path.Combine(tempDir, "slice-test.bin");
+            File.WriteAllBytes(sliceTestFile, new byte[] { 1, 2, 3, 4, 5, 6, 7 });
+            var twoSliceMd5 = BaiduPanService.ComputeSliceMd5ListAsync(sliceTestFile, sliceSize: 4).GetAwaiter().GetResult();
+            var existingTarget = Path.Combine(tempDir, "already-downloaded.iso");
+            File.WriteAllBytes(existingTarget, new byte[128]);
+            var baiduSettings = new AppSettings { ProxyMode = ProxyMode.None, BaiduAccessToken = "tok_skip" };
+            using var baiduFactory = new NetworkClientFactory(() => baiduSettings);
+            var baiduSvc = new BaiduPanService(baiduFactory);
+            var skipRes = baiduSvc.DownloadFileAsync(baiduSettings, "https://d.pcs.baidu.com/file/already", existingTarget, expectedSize: 128).GetAwaiter().GetResult();
+            Check(
+                "百度网盘：HTTP Range 断点续传头、分片 MD5 列表与本地同大小文件自动跳过",
+                rangeReq.Headers.Range?.ToString() == "bytes=4096-"
+                && twoSliceMd5.Count == 2
+                && twoSliceMd5[0].Length == 32
+                && twoSliceMd5[1].Length == 32
+                && twoSliceMd5[0] != twoSliceMd5[1]
+                && skipRes.SkippedExisting
+                && BaiduPanService.CombineRemotePath("/", "test.zip") == "/test.zip"
+                && BaiduPanService.CombineRemotePath("/资源/系统", "win11.iso") == "/资源/系统/win11.iso",
+                $"range={rangeReq.Headers.Range}, slices={twoSliceMd5.Count}, skipped={skipRes.SkippedExisting}");
         }
         catch (Exception ex)
         {

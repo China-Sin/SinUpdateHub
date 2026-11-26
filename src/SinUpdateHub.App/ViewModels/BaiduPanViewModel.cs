@@ -13,7 +13,6 @@ public sealed record BaiduBreadcrumbItem(string Label, string FullPath, bool IsL
 /// <summary>百度网盘列表项 ViewModel。</summary>
 public sealed class BaiduFileItemViewModel : ObservableObject
 {
-    // 矢量图标 Path（不依赖系统图标字体，彻底杜绝方框乱码）
     public const string FolderPathData = "M10,4H4C2.9,4,2,4.9,2,6v12c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2V8c0-1.1-0.9-2-2-2h-8L10,4z";
     private const string ArchivePathData = "M14,2H6C4.9,2,4,2.9,4,4v16c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2V8L14,2z M13,9V3.5L18.5,9H13z M9,6h2v2H9V6z M11,8h2v2h-2V8z M9,10h2v2H9V10z M11,12h2v2h-2V12z M9,14h4v3H9V14z";
     private const string ExecutablePathData = "M4,4h16c1.1,0,2,0.9,2,2v12c0,1.1-0.9,2-2,2H4c-1.1,0-2-0.9-2-2V6C2,4.9,2.9,4,4,4z M4,8v10h16V8H4z M7,10.5l3.5,2.5L7,15.5V10.5z M12,14h5v1.5h-5V14z";
@@ -22,12 +21,15 @@ public sealed class BaiduFileItemViewModel : ObservableObject
 
     private bool _isSelected;
 
-    public BaiduFileItemViewModel(BaiduFileEntry entry)
+    public BaiduFileItemViewModel(BaiduFileEntry entry, bool showParentPath = false)
     {
         Entry = entry;
+        ShowParentPath = showParentPath;
     }
 
     public BaiduFileEntry Entry { get; }
+
+    public bool ShowParentPath { get; }
 
     public bool IsSelected
     {
@@ -40,6 +42,8 @@ public sealed class BaiduFileItemViewModel : ObservableObject
     public string Name => Entry.Name;
 
     public string Path => Entry.Path;
+
+    public string ParentDirText => BaiduPanService.GetParentDir(Entry.Path);
 
     public string IconPathData
     {
@@ -86,9 +90,26 @@ public sealed class BaiduFileItemViewModel : ObservableObject
         if (bytes < 1024L * 1024 * 1024) return $"{bytes / (1024.0 * 1024):F1} MB";
         return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
     }
+
+    public static string FormatSpeed(double bytesPerSecond)
+    {
+        if (bytesPerSecond <= 0) return string.Empty;
+        if (bytesPerSecond < 1024) return $"{bytesPerSecond:F0} B/s";
+        if (bytesPerSecond < 1024 * 1024) return $"{bytesPerSecond / 1024.0:F1} KB/s";
+        return $"{bytesPerSecond / (1024.0 * 1024):F1} MB/s";
+    }
+
+    public static string FormatEta(TimeSpan? eta)
+    {
+        if (eta is null || eta.Value <= TimeSpan.Zero) return string.Empty;
+        var t = eta.Value;
+        return t.TotalHours >= 1
+            ? $"剩余 {(int)t.TotalHours:D2}:{t.Minutes:D2}:{t.Seconds:D2}"
+            : $"剩余 {t.Minutes:D2}:{t.Seconds:D2}";
+    }
 }
 
-/// <summary>百度网盘页面 ViewModel：手动配置 AppKey/SecretKey、内置 OAuth2 登录、目录浏览与整文件夹/多选下载。</summary>
+/// <summary>百度网盘页面 ViewModel：手动配置 AppKey/SecretKey、内置 OAuth2 登录、目录浏览、全网盘搜索、断点续传下载与分片上传。</summary>
 public sealed class BaiduPanViewModel : ObservableObject
 {
     private readonly AppServices _services;
@@ -99,12 +120,14 @@ public sealed class BaiduPanViewModel : ObservableObject
     private bool _showSecretKey;
     private string _currentDir;
     private string _localDownloadDir;
+    private string _searchKeyword = string.Empty;
+    private bool _isSearchMode;
     private bool _isBusy;
-    private bool _isDownloading;
+    private bool _isTransferring;
     private double _downloadProgressPercent;
     private string _downloadProgressText = string.Empty;
     private string _statusMessage = "请先填写 AppKey 和 SecretKey，然后点击「登录百度网盘」";
-    private CancellationTokenSource? _downloadCts;
+    private CancellationTokenSource? _transferCts;
 
     public BaiduPanViewModel(AppServices services)
     {
@@ -119,24 +142,27 @@ public sealed class BaiduPanViewModel : ObservableObject
 
         if (IsLoggedIn)
         {
-            _statusMessage = $"已登录：{AccountStatusText}，点击「刷新目录」即可浏览网盘文件";
+            _statusMessage = $"已登录：{AccountStatusText}，支持断点续传下载、全网盘搜索与文件上传";
         }
 
         SaveConfigCommand = new RelayCommand(SaveConfig);
         OpenConsoleCommand = new RelayCommand(OpenConsole);
-        LoginCommand = new AsyncRelayCommand(LoginAsync, () => !IsBusy && !IsDownloading);
-        LogoutCommand = new RelayCommand(Logout, () => IsLoggedIn && !IsBusy && !IsDownloading);
-        NavigateDirCommand = new AsyncRelayCommand(RefreshDirAsync, () => IsLoggedIn && !IsBusy && !IsDownloading);
-        NavigateBreadcrumbCommand = new AsyncRelayCommand(NavigateBreadcrumbAsync, _ => IsLoggedIn && !IsBusy && !IsDownloading);
-        GoParentCommand = new AsyncRelayCommand(GoParentAsync, () => IsLoggedIn && !IsBusy && !IsDownloading && CurrentDir != "/");
-        RefreshCommand = new AsyncRelayCommand(RefreshDirAsync, () => IsLoggedIn && !IsBusy && !IsDownloading);
-        SelectAllCommand = new RelayCommand(() => SetAllSelected(true), () => Items.Count > 0 && !IsDownloading);
-        ClearSelectionCommand = new RelayCommand(() => SetAllSelected(false), () => Items.Count > 0 && !IsDownloading);
-        ChooseDownloadDirCommand = new RelayCommand(ChooseDownloadDir, () => !IsDownloading);
+        LoginCommand = new AsyncRelayCommand(LoginAsync, () => !IsBusy && !IsTransferring);
+        LogoutCommand = new RelayCommand(Logout, () => IsLoggedIn && !IsBusy && !IsTransferring);
+        NavigateDirCommand = new AsyncRelayCommand(RefreshDirAsync, () => IsLoggedIn && !IsBusy && !IsTransferring);
+        NavigateBreadcrumbCommand = new AsyncRelayCommand(NavigateBreadcrumbAsync, _ => IsLoggedIn && !IsBusy && !IsTransferring);
+        GoParentCommand = new AsyncRelayCommand(GoParentAsync, () => IsLoggedIn && !IsBusy && !IsTransferring && (IsSearchMode || CurrentDir != "/"));
+        RefreshCommand = new AsyncRelayCommand(RefreshOrRepeatSearchAsync, () => IsLoggedIn && !IsBusy && !IsTransferring);
+        SearchCommand = new AsyncRelayCommand(SearchAsync, () => IsLoggedIn && !IsBusy && !IsTransferring);
+        ClearSearchCommand = new AsyncRelayCommand(ClearSearchAsync, () => IsLoggedIn && !IsBusy && !IsTransferring);
+        SelectAllCommand = new RelayCommand(() => SetAllSelected(true), () => Items.Count > 0 && !IsTransferring);
+        ClearSelectionCommand = new RelayCommand(() => SetAllSelected(false), () => Items.Count > 0 && !IsTransferring);
+        ChooseDownloadDirCommand = new RelayCommand(ChooseDownloadDir, () => !IsTransferring);
         OpenDownloadDirCommand = new RelayCommand(OpenDownloadDir);
-        DownloadSelectedCommand = new AsyncRelayCommand(DownloadSelectedAsync, () => IsLoggedIn && !IsBusy && !IsDownloading && Items.Count > 0);
-        DownloadCurrentFolderCommand = new AsyncRelayCommand(DownloadCurrentFolderAsync, () => IsLoggedIn && !IsBusy && !IsDownloading && Items.Count > 0);
-        CancelDownloadCommand = new RelayCommand(CancelDownload, () => IsDownloading);
+        DownloadSelectedCommand = new AsyncRelayCommand(DownloadSelectedAsync, () => IsLoggedIn && !IsBusy && !IsTransferring && Items.Count > 0);
+        DownloadCurrentFolderCommand = new AsyncRelayCommand(DownloadCurrentFolderAsync, () => IsLoggedIn && !IsBusy && !IsTransferring && Items.Count > 0);
+        UploadFilesCommand = new AsyncRelayCommand(UploadFilesAsync, () => IsLoggedIn && !IsBusy && !IsTransferring);
+        CancelDownloadCommand = new RelayCommand(CancelTransfer, () => IsTransferring);
 
         RebuildBreadcrumbs();
     }
@@ -146,6 +172,9 @@ public sealed class BaiduPanViewModel : ObservableObject
 
     /// <summary>请求主窗口弹出本地目录选择器，返回选定路径（取消返回 null）。</summary>
     public Func<string, string?>? PickFolderRequested { get; set; }
+
+    /// <summary>请求主窗口弹出多文件选择器，返回待上传的本地路径数组（取消返回 null）。</summary>
+    public Func<string[]?>? PickFilesRequested { get; set; }
 
     public Action<string, string>? ShowMessage { get; set; }
 
@@ -222,6 +251,25 @@ public sealed class BaiduPanViewModel : ObservableObject
         set => SetProperty(ref _localDownloadDir, value);
     }
 
+    public string SearchKeyword
+    {
+        get => _searchKeyword;
+        set => SetProperty(ref _searchKeyword, value);
+    }
+
+    public bool IsSearchMode
+    {
+        get => _isSearchMode;
+        private set
+        {
+            if (SetProperty(ref _isSearchMode, value))
+            {
+                RaisePropertyChanged(nameof(ItemCountText));
+                RaiseCommands();
+            }
+        }
+    }
+
     public bool IsBusy
     {
         get => _isBusy;
@@ -234,17 +282,21 @@ public sealed class BaiduPanViewModel : ObservableObject
         }
     }
 
-    public bool IsDownloading
+    public bool IsTransferring
     {
-        get => _isDownloading;
+        get => _isTransferring;
         private set
         {
-            if (SetProperty(ref _isDownloading, value))
+            if (SetProperty(ref _isTransferring, value))
             {
+                OnPropertyChanged(nameof(IsDownloading));
                 RaiseCommands();
             }
         }
     }
+
+    /// <summary>兼容已有 XAML 绑定：传输（下载/上传）进行中。</summary>
+    public bool IsDownloading => IsTransferring;
 
     public double DownloadProgressPercent
     {
@@ -266,9 +318,19 @@ public sealed class BaiduPanViewModel : ObservableObject
 
     public bool HasNoItems => Items.Count == 0;
 
-    public string ItemCountText => Items.Count == 0
-        ? "当前目录暂无文件"
-        : $"共 {Items.Count} 项（{Items.Count(i => i.IsDir)} 个文件夹 · {Items.Count(i => !i.IsDir)} 个文件）";
+    public string ItemCountText
+    {
+        get
+        {
+            if (Items.Count == 0)
+            {
+                return IsSearchMode ? "未搜索到匹配的网盘文件" : "当前目录暂无文件";
+            }
+
+            var prefix = IsSearchMode ? $"搜索结果 {Items.Count} 项" : $"共 {Items.Count} 项";
+            return $"{prefix}（{Items.Count(i => i.IsDir)} 个文件夹 · {Items.Count(i => !i.IsDir)} 个文件）";
+        }
+    }
 
     // ---------- 命令 ----------
 
@@ -280,15 +342,18 @@ public sealed class BaiduPanViewModel : ObservableObject
     public ICommand NavigateBreadcrumbCommand { get; }
     public ICommand GoParentCommand { get; }
     public ICommand RefreshCommand { get; }
+    public ICommand SearchCommand { get; }
+    public ICommand ClearSearchCommand { get; }
     public ICommand SelectAllCommand { get; }
     public ICommand ClearSelectionCommand { get; }
     public ICommand ChooseDownloadDirCommand { get; }
     public ICommand OpenDownloadDirCommand { get; }
     public ICommand DownloadSelectedCommand { get; }
     public ICommand DownloadCurrentFolderCommand { get; }
+    public ICommand UploadFilesCommand { get; }
     public ICommand CancelDownloadCommand { get; }
 
-    // ---------- 操作 ----------
+    // ---------- 账号与配置 ----------
 
     public void SaveConfig()
     {
@@ -380,16 +445,41 @@ public sealed class BaiduPanViewModel : ObservableObject
     /// <summary>切到百度网盘页时若已登录且尚未加载过列表，则自动加载默认目录。</summary>
     public async Task OnShownAsync()
     {
-        if (!IsLoggedIn || IsBusy || IsDownloading)
+        if (!IsLoggedIn || IsBusy || IsTransferring)
         {
             return;
         }
 
-        if (Items.Count == 0)
+        if (Items.Count == 0 && !IsSearchMode)
         {
             await RefreshDirAsync();
         }
     }
+
+    private void Logout()
+    {
+        if (!(Confirm?.Invoke("退出登录", "确定退出当前百度网盘账号并清除本地保存的令牌吗？（AppKey 与 SecretKey 会保留）") ?? false))
+        {
+            return;
+        }
+
+        var s = _services.Settings;
+        s.BaiduAccessToken = string.Empty;
+        s.BaiduRefreshToken = string.Empty;
+        s.BaiduTokenExpiresAt = null;
+        s.BaiduUserName = string.Empty;
+        s.BaiduVipType = 0;
+        _services.SaveSettings();
+
+        IsSearchMode = false;
+        SearchKeyword = string.Empty;
+        Items.Clear();
+        RaisePropertyChanged(nameof(IsLoggedIn), nameof(AccountStatusText), nameof(HasNoItems), nameof(ItemCountText));
+        RaiseCommands();
+        StatusMessage = "已退出百度网盘登录";
+    }
+
+    // ---------- 目录浏览与搜索 ----------
 
     private async Task NavigateBreadcrumbAsync(object? parameter)
     {
@@ -420,30 +510,9 @@ public sealed class BaiduPanViewModel : ObservableObject
         }
     }
 
-    private void Logout()
-    {
-        if (!(Confirm?.Invoke("退出登录", "确定退出当前百度网盘账号并清除本地保存的令牌吗？（AppKey 与 SecretKey 会保留）") ?? false))
-        {
-            return;
-        }
-
-        var s = _services.Settings;
-        s.BaiduAccessToken = string.Empty;
-        s.BaiduRefreshToken = string.Empty;
-        s.BaiduTokenExpiresAt = null;
-        s.BaiduUserName = string.Empty;
-        s.BaiduVipType = 0;
-        _services.SaveSettings();
-
-        Items.Clear();
-        RaisePropertyChanged(nameof(IsLoggedIn), nameof(AccountStatusText), nameof(HasNoItems), nameof(ItemCountText));
-        RaiseCommands();
-        StatusMessage = "已退出百度网盘登录";
-    }
-
     public async Task OpenFolderAsync(BaiduFileItemViewModel? item)
     {
-        if (item is null || !item.IsDir || IsBusy || IsDownloading)
+        if (item is null || !item.IsDir || IsBusy || IsTransferring)
         {
             return;
         }
@@ -454,17 +523,36 @@ public sealed class BaiduPanViewModel : ObservableObject
 
     private async Task GoParentAsync()
     {
+        if (IsSearchMode)
+        {
+            await ClearSearchAsync();
+            return;
+        }
+
         CurrentDir = BaiduPanService.GetParentDir(CurrentDir);
         await RefreshDirAsync();
     }
 
+    private async Task RefreshOrRepeatSearchAsync()
+    {
+        if (IsSearchMode && !string.IsNullOrWhiteSpace(SearchKeyword))
+        {
+            await SearchAsync();
+        }
+        else
+        {
+            await RefreshDirAsync();
+        }
+    }
+
     public async Task RefreshDirAsync()
     {
-        if (!IsLoggedIn || IsBusy || IsDownloading)
+        if (!IsLoggedIn || IsBusy || IsTransferring)
         {
             return;
         }
 
+        IsSearchMode = false;
         CurrentDir = BaiduPanService.NormalizeRemoteDir(CurrentDir);
         _services.Settings.BaiduDefaultDir = CurrentDir;
         _services.SaveSettings();
@@ -481,7 +569,7 @@ public sealed class BaiduPanViewModel : ObservableObject
             Items.Clear();
             foreach (var entry in entries)
             {
-                Items.Add(new BaiduFileItemViewModel(entry));
+                Items.Add(new BaiduFileItemViewModel(entry, showParentPath: false));
             }
 
             RaisePropertyChanged(nameof(HasNoItems), nameof(ItemCountText));
@@ -497,6 +585,59 @@ public sealed class BaiduPanViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+
+    public async Task SearchAsync()
+    {
+        if (!IsLoggedIn || IsBusy || IsTransferring)
+        {
+            return;
+        }
+
+        var key = (SearchKeyword ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            await RefreshDirAsync();
+            return;
+        }
+
+        IsBusy = true;
+        StatusMessage = $"正在全网盘搜索「{key}」…";
+        try
+        {
+            var entries = await _services.BaiduPan.SearchFilesAsync(
+                _services.Settings,
+                key,
+                "/",
+                () => _services.SaveSettings());
+
+            IsSearchMode = true;
+            Items.Clear();
+            foreach (var entry in entries)
+            {
+                Items.Add(new BaiduFileItemViewModel(entry, showParentPath: true));
+            }
+
+            RaisePropertyChanged(nameof(HasNoItems), nameof(ItemCountText));
+            RaiseCommands();
+            StatusMessage = $"全网盘搜索「{key}」完成：{ItemCountText}";
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"搜索百度网盘失败：{key}", ex);
+            StatusMessage = "搜索失败：" + ex.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task ClearSearchAsync()
+    {
+        SearchKeyword = string.Empty;
+        IsSearchMode = false;
+        await RefreshDirAsync();
     }
 
     private void SetAllSelected(bool selected)
@@ -536,6 +677,8 @@ public sealed class BaiduPanViewModel : ObservableObject
         }
     }
 
+    // ---------- 下载（支持断点续传、已存在跳过、实时网速/ETA） ----------
+
     private async Task DownloadSelectedAsync()
     {
         var selected = Items.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
@@ -555,6 +698,15 @@ public sealed class BaiduPanViewModel : ObservableObject
             return;
         }
 
+        var scopeLabel = IsSearchMode ? $"当前搜索结果（{Items.Count} 项）" : $"目录「{CurrentDir}」（{Items.Count} 项，含全部子文件夹）";
+        var ok = Confirm?.Invoke(
+            "确认批量下载",
+            $"确定下载 {scopeLabel} 到本地目录吗？\n保存到：{ResolveLocalDownloadDir()}\n\n提示：本地已存在同大小文件将自动跳过，未完成大文件支持断点续传。") ?? false;
+        if (!ok)
+        {
+            return;
+        }
+
         await DownloadEntriesAsync(Items.Select(i => i.Entry).ToList());
     }
 
@@ -563,21 +715,22 @@ public sealed class BaiduPanViewModel : ObservableObject
         var saveRoot = ResolveLocalDownloadDir();
         Directory.CreateDirectory(saveRoot);
 
-        _downloadCts?.Dispose();
-        _downloadCts = new CancellationTokenSource();
-        var ct = _downloadCts.Token;
+        _transferCts?.Dispose();
+        _transferCts = new CancellationTokenSource();
+        var ct = _transferCts.Token;
 
-        IsDownloading = true;
+        IsTransferring = true;
         DownloadProgressPercent = 0;
         DownloadProgressText = "正在扫描待下载文件列表…";
         StatusMessage = "正在扫描文件夹内容…";
 
         try
         {
+            var baseDirForRelative = IsSearchMode ? "/" : CurrentDir;
             var tasks = await _services.BaiduPan.CollectFilesRecursiveAsync(
                 _services.Settings,
                 roots,
-                CurrentDir,
+                baseDirForRelative,
                 () => _services.SaveSettings(),
                 ct);
 
@@ -596,6 +749,7 @@ public sealed class BaiduPanViewModel : ObservableObject
                 ct);
 
             var succeeded = 0;
+            var skipped = 0;
             var failedList = new List<string>();
 
             for (var i = 0; i < tasks.Count; i++)
@@ -610,27 +764,45 @@ public sealed class BaiduPanViewModel : ObservableObject
                 }
 
                 var targetPath = Path.Combine(saveRoot, item.RelativeLocalPath);
-                var fileProgress = new Progress<DownloadProgress>(p =>
+                var fileProgress = new Progress<BaiduTransferProgress>(p =>
                 {
                     var overall = ((fileIndex - 1) + p.Fraction) / tasks.Count * 100.0;
                     DownloadProgressPercent = Math.Clamp(overall, 0, 100);
-                    var sizeInfo = p.Total is > 0
-                        ? $"{BaiduFileItemViewModel.FormatSize(p.Received)} / {BaiduFileItemViewModel.FormatSize(p.Total.Value)}"
-                        : BaiduFileItemViewModel.FormatSize(p.Received);
-                    DownloadProgressText = $"[{fileIndex}/{tasks.Count}] {item.File.Name}  ({p.Fraction:P0} · {sizeInfo})";
+                    if (!string.IsNullOrWhiteSpace(p.Message))
+                    {
+                        DownloadProgressText = $"[{fileIndex}/{tasks.Count}] {item.File.Name} · {p.Message}";
+                        return;
+                    }
+
+                    var sizeInfo = p.TotalBytes is > 0
+                        ? $"{BaiduFileItemViewModel.FormatSize(p.TransferredBytes)} / {BaiduFileItemViewModel.FormatSize(p.TotalBytes.Value)}"
+                        : BaiduFileItemViewModel.FormatSize(p.TransferredBytes);
+                    var speed = BaiduFileItemViewModel.FormatSpeed(p.BytesPerSecond);
+                    var eta = BaiduFileItemViewModel.FormatEta(p.EstimatedRemaining);
+                    var resumeTag = p.IsResumed ? "续传 · " : string.Empty;
+                    var tail = string.Join(" · ", new[] { sizeInfo, speed, eta }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                    DownloadProgressText = $"[{fileIndex}/{tasks.Count}] {item.File.Name}  ({resumeTag}{p.Fraction:P0} · {tail})";
                 });
 
                 StatusMessage = $"正在下载 [{fileIndex}/{tasks.Count}] {item.File.Name} …";
                 try
                 {
-                    await _services.BaiduPan.DownloadFileAsync(
+                    var result = await _services.BaiduPan.DownloadFileAsync(
                         _services.Settings,
                         dlink,
                         targetPath,
+                        item.File.Size,
                         fileProgress,
                         () => _services.SaveSettings(),
                         ct);
-                    succeeded++;
+                    if (result.SkippedExisting)
+                    {
+                        skipped++;
+                    }
+                    else
+                    {
+                        succeeded++;
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -644,24 +816,25 @@ public sealed class BaiduPanViewModel : ObservableObject
             }
 
             DownloadProgressPercent = 100;
+            var skippedText = skipped > 0 ? $"，跳过已存在 {skipped} 个" : string.Empty;
             if (failedList.Count == 0)
             {
-                DownloadProgressText = $"全部下载完成：共 {succeeded} 个文件";
-                StatusMessage = $"下载完成：已保存 {succeeded} 个文件到 {saveRoot}";
+                DownloadProgressText = $"全部下载完成：新下载 {succeeded} 个{skippedText}";
+                StatusMessage = $"下载完成：新下载 {succeeded} 个{skippedText}（目录：{saveRoot}）";
             }
             else
             {
-                DownloadProgressText = $"下载结束：成功 {succeeded} 个，失败 {failedList.Count} 个";
+                DownloadProgressText = $"下载结束：成功 {succeeded} 个{skippedText}，失败 {failedList.Count} 个";
                 StatusMessage = DownloadProgressText;
                 ShowMessage?.Invoke(
                     "部分文件下载失败",
-                    $"成功 {succeeded} 个，失败 {failedList.Count} 个：\n" + string.Join("\n", failedList.Take(8)));
+                    $"成功 {succeeded} 个{skippedText}，失败 {failedList.Count} 个：\n" + string.Join("\n", failedList.Take(8)));
             }
         }
         catch (OperationCanceledException)
         {
-            StatusMessage = "已取消百度网盘下载";
-            DownloadProgressText = "下载已取消";
+            StatusMessage = "已取消下载（未完成大文件已保留 .part 进度，下次点击下载可自动断点续传）";
+            DownloadProgressText = "下载已取消（支持下次断点续传）";
         }
         catch (Exception ex)
         {
@@ -672,17 +845,138 @@ public sealed class BaiduPanViewModel : ObservableObject
         }
         finally
         {
-            IsDownloading = false;
-            _downloadCts?.Dispose();
-            _downloadCts = null;
+            IsTransferring = false;
+            _transferCts?.Dispose();
+            _transferCts = null;
         }
     }
 
-    private void CancelDownload()
+    // ---------- 上传本地文件到当前目录 ----------
+
+    private async Task UploadFilesAsync()
+    {
+        var files = PickFilesRequested?.Invoke();
+        if (files is null || files.Length == 0)
+        {
+            return;
+        }
+
+        var targetRemoteDir = BaiduPanService.NormalizeRemoteDir(CurrentDir);
+
+        _transferCts?.Dispose();
+        _transferCts = new CancellationTokenSource();
+        var ct = _transferCts.Token;
+
+        IsTransferring = true;
+        DownloadProgressPercent = 0;
+        DownloadProgressText = $"准备上传 {files.Length} 个文件到 {targetRemoteDir} …";
+        StatusMessage = $"正在上传到 {targetRemoteDir} …";
+
+        var uploadedCount = 0;
+        var instantCount = 0;
+        var failedList = new List<string>();
+
+        try
+        {
+            for (var i = 0; i < files.Length; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                var localFile = files[i];
+                var fileName = Path.GetFileName(localFile);
+                var fileIndex = i + 1;
+
+                var fileProgress = new Progress<BaiduTransferProgress>(p =>
+                {
+                    var overall = ((fileIndex - 1) + p.Fraction) / files.Length * 100.0;
+                    DownloadProgressPercent = Math.Clamp(overall, 0, 100);
+                    if (!string.IsNullOrWhiteSpace(p.Message))
+                    {
+                        DownloadProgressText = $"上传 [{fileIndex}/{files.Length}] {fileName} · {p.Message}";
+                        return;
+                    }
+
+                    var sizeInfo = p.TotalBytes is > 0
+                        ? $"{BaiduFileItemViewModel.FormatSize(p.TransferredBytes)} / {BaiduFileItemViewModel.FormatSize(p.TotalBytes.Value)}"
+                        : BaiduFileItemViewModel.FormatSize(p.TransferredBytes);
+                    var speed = BaiduFileItemViewModel.FormatSpeed(p.BytesPerSecond);
+                    var eta = BaiduFileItemViewModel.FormatEta(p.EstimatedRemaining);
+                    var tail = string.Join(" · ", new[] { sizeInfo, speed, eta }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                    DownloadProgressText = $"上传 [{fileIndex}/{files.Length}] {fileName}  ({p.Fraction:P0} · {tail})";
+                });
+
+                StatusMessage = $"正在上传 [{fileIndex}/{files.Length}] {fileName} → {targetRemoteDir} …";
+                try
+                {
+                    var res = await _services.BaiduPan.UploadFileAsync(
+                        _services.Settings,
+                        localFile,
+                        targetRemoteDir,
+                        fileProgress,
+                        () => _services.SaveSettings(),
+                        ct);
+                    uploadedCount++;
+                    if (res.InstantUploaded)
+                    {
+                        instantCount++;
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Write($"上传文件到百度网盘失败：{localFile}", ex);
+                    failedList.Add($"{fileName}（{ex.Message}）");
+                }
+            }
+
+            DownloadProgressPercent = 100;
+            var instantNote = instantCount > 0 ? $"（含 {instantCount} 个秒传）" : string.Empty;
+            if (failedList.Count == 0)
+            {
+                DownloadProgressText = $"上传完成：共 {uploadedCount} 个文件{instantNote}";
+                StatusMessage = $"已上传 {uploadedCount} 个文件到 {targetRemoteDir}{instantNote}";
+            }
+            else
+            {
+                DownloadProgressText = $"上传结束：成功 {uploadedCount} 个，失败 {failedList.Count} 个";
+                StatusMessage = DownloadProgressText;
+                ShowMessage?.Invoke(
+                    "部分文件上传失败",
+                    $"成功 {uploadedCount} 个，失败 {failedList.Count} 个：\n" + string.Join("\n", failedList.Take(8)));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = "已取消文件上传";
+            DownloadProgressText = "上传已取消";
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write("百度网盘上传失败", ex);
+            StatusMessage = "上传失败：" + ex.Message;
+            DownloadProgressText = string.Empty;
+            ShowMessage?.Invoke("上传失败", ex.Message);
+        }
+        finally
+        {
+            IsTransferring = false;
+            _transferCts?.Dispose();
+            _transferCts = null;
+        }
+
+        if (uploadedCount > 0 && !IsSearchMode)
+        {
+            await RefreshDirAsync();
+        }
+    }
+
+    public void CancelTransfer()
     {
         try
         {
-            _downloadCts?.Cancel();
+            _transferCts?.Cancel();
         }
         catch
         {
@@ -708,11 +1002,14 @@ public sealed class BaiduPanViewModel : ObservableObject
         (NavigateBreadcrumbCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (GoParentCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (RefreshCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        (SearchCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        (ClearSearchCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (SelectAllCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (ClearSelectionCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (ChooseDownloadDirCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (DownloadSelectedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (DownloadCurrentFolderCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        (UploadFilesCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (CancelDownloadCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }
 }

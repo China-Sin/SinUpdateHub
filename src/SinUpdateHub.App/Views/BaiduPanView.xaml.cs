@@ -21,6 +21,15 @@ public partial class BaiduPanView : UserControl
         }
     }
 
+    private async void SearchBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && DataContext is BaiduPanViewModel vm)
+        {
+            e.Handled = true;
+            await vm.SearchAsync();
+        }
+    }
+
     private async void FileListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (DataContext is BaiduPanViewModel vm

@@ -51,14 +51,30 @@ public sealed class BaiduDownloadTaskItem
     public required string RelativeLocalPath { get; init; }
 }
 
-/// <summary>批量下载进度回调。</summary>
-public sealed class BaiduBatchProgress
+/// <summary>单文件下载/上传实时传输进度（含速率与预计剩余时间）。</summary>
+public sealed class BaiduTransferProgress
 {
-    public int CurrentIndex { get; init; }
-    public int TotalFiles { get; init; }
-    public string CurrentFileName { get; init; } = string.Empty;
-    public long FileReceivedBytes { get; init; }
-    public long? FileTotalBytes { get; init; }
-    public double FileFraction { get; init; }
+    public long TransferredBytes { get; init; }
+    public long? TotalBytes { get; init; }
+    public double Fraction { get; init; }
+    public double BytesPerSecond { get; init; }
+    public TimeSpan? EstimatedRemaining { get; init; }
+    public bool IsResumed { get; init; }
     public string Message { get; init; } = string.Empty;
+}
+
+/// <summary>单文件下载结果。</summary>
+public sealed class BaiduDownloadFileResult
+{
+    public string LocalPath { get; init; } = string.Empty;
+    public bool SkippedExisting { get; init; }
+    public long ResumedFromBytes { get; init; }
+}
+
+/// <summary>单文件上传结果。</summary>
+public sealed class BaiduUploadFileResult
+{
+    public string RemotePath { get; init; } = string.Empty;
+    public bool InstantUploaded { get; init; }
+    public long TotalBytes { get; init; }
 }
