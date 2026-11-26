@@ -39,41 +39,89 @@
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
-                    <!-- 搜索框：图标 + 输入 + 占位提示 + 清除 -->
-                    <Grid Width="240" Height="34">
-                        <TextBox Style="{StaticResource InputBox}"
-                                 Height="34"
-                                 Padding="32,0,32,0"
-                                 AutomationProperties.Name="搜索"
-                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
-                        <TextBlock Text="&#xE721;"
-                                   FontFamily="{StaticResource FontFamilyIcon}"
-                                   FontSize="13"
-                                   Foreground="{StaticResource BrushTextMuted}"
-                                   HorizontalAlignment="Left"
-                                   VerticalAlignment="Center"
-                                   Margin="11,0,0,0"
-                                   IsHitTestVisible="False" />
-                        <TextBlock Text="搜索名称 / 包 / 版本"
-                                   FontSize="12"
-                                   Foreground="{StaticResource BrushTextMuted}"
-                                   HorizontalAlignment="Left"
-                                   VerticalAlignment="Center"
-                                   Margin="32,0,0,0"
-                                   IsHitTestVisible="False"
-                                   Visibility="{Binding SearchText, Converter={StaticResource NullToVis}, ConverterParameter=invert}" />
-                        <Button Style="{StaticResource IconButton}"
-                                Width="24"
-                                Height="24"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center"
-                                Margin="0,0,4,0"
-                                Content="&#xE711;"
-                                ToolTip="清除搜索"
-                                AutomationProperties.Name="清除搜索"
-                                Command="{Binding ClearSearchCommand}"
-                                Visibility="{Binding SearchText, Converter={StaticResource NullToVis}}" />
-                    </Grid>
+                    <!-- 搜索框：3 列容器 + 无内边距透明 TextBox（杜绝 InputBox 双重 Padding 与中文输入法候选字重叠占位符） -->
+                    <Border Width="240"
+                            Height="34"
+                            Background="{StaticResource BrushBg0}"
+                            CornerRadius="6"
+                            BorderThickness="1"
+                            SnapsToDevicePixels="True">
+                        <Border.Style>
+                            <Style TargetType="{x:Type Border}">
+                                <Setter Property="BorderBrush" Value="{StaticResource BrushBorder}" />
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="BorderBrush" Value="{StaticResource BrushBorderStrong}" />
+                                    </Trigger>
+                                    <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                        <Setter Property="BorderBrush" Value="{StaticResource BrushAccent}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="28" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Text="&#xE721;"
+                                       FontFamily="{StaticResource FontFamilyIcon}"
+                                       FontSize="13"
+                                       Foreground="{StaticResource BrushTextMuted}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False" />
+
+                            <Grid Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="搜索名称 / 包 / 版本"
+                                           FontSize="12"
+                                           Foreground="{StaticResource BrushTextMuted}"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="{x:Type TextBlock}">
+                                            <Setter Property="Visibility" Value="{Binding SearchText, Converter={StaticResource NullToVis}, ConverterParameter=invert}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsKeyboardFocused, ElementName=AppSearchBox}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <TextBox x:Name="AppSearchBox"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Padding="0"
+                                         Margin="0"
+                                         FontSize="13"
+                                         Foreground="{StaticResource BrushText}"
+                                         CaretBrush="{StaticResource BrushText}"
+                                         SelectionBrush="{StaticResource BrushAccent}"
+                                         VerticalContentAlignment="Center"
+                                         FocusVisualStyle="{x:Null}"
+                                         AutomationProperties.Name="搜索"
+                                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+
+                            <Button Grid.Column="2"
+                                    Style="{StaticResource IconButton}"
+                                    Width="24"
+                                    Height="24"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Content="&#xE711;"
+                                    ToolTip="清除搜索"
+                                    AutomationProperties.Name="清除搜索"
+                                    Command="{Binding ClearSearchCommand}"
+                                    Visibility="{Binding SearchText, Converter={StaticResource NullToVis}}" />
+                        </Grid>
+                    </Border>
 
                     <Button Style="{StaticResource SecondaryButton}"
                             Height="34"
