@@ -558,6 +558,16 @@
                                 </Button>
                                 <Button Style="{StaticResource SecondaryButton}"
                                         Margin="0,0,8,0"
+                                        Command="{Binding AddSelectedToDownloadListCommand}"
+                                        ToolTip="把勾选的文件或文件夹批量加入左侧「软件下载」列表，方便以后一键下载"
+                                        AutomationProperties.Name="添加到软件下载列表">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource ButtonGlyph}" Text="&#xE710;" />
+                                        <TextBlock Text="添加到软件下载" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource SecondaryButton}"
+                                        Margin="0,0,8,0"
                                         Command="{Binding UploadFilesCommand}"
                                         AutomationProperties.Name="上传文件到当前目录">
                                     <StackPanel Orientation="Horizontal">

@@ -31,13 +31,19 @@ public sealed class AppServices
 
         svc.GitHub = new GitHubSourceProvider(svc.Network, () => svc.Settings);
         svc.Winget = new WingetSourceProvider(svc.Network, () => svc.Settings, svc.WingetCatalog);
-        svc.Checker = new UpdateChecker(new IUpdateSourceProvider[] { svc.GitHub, svc.Winget, new ManualSourceProvider(svc.Network) });
+        svc.BaiduPan = new BaiduPanService(svc.Network);
+        svc.Checker = new UpdateChecker(new IUpdateSourceProvider[]
+        {
+            svc.GitHub,
+            svc.Winget,
+            new ManualSourceProvider(svc.Network),
+            new BaiduPanSourceProvider(svc.BaiduPan, () => svc.Settings),
+        });
 
         svc.Detector = new InstalledAppDetector();
         svc.Downloader = new DownloadService(svc.Network, () => svc.Settings);
         svc.Installer = new InstallerRunner(() => svc.Settings);
         svc.WebDav = new WebDavBackupService(svc.Network, () => svc.Settings);
-        svc.BaiduPan = new BaiduPanService(svc.Network);
 
         AppPaths.EnsureAll(svc.Settings.DownloadDir);
         Current = svc;

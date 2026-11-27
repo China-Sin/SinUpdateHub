@@ -84,18 +84,20 @@ public sealed class StateToBrushConverter : IValueConverter
     }
 }
 
-/// <summary>SourceKind → 来源标签颜色（GitHub 紫 / WinGet 青）。</summary>
+/// <summary>SourceKind → 来源标签颜色（GitHub 紫 / WinGet 青 / 官网 琥珀 / 网盘 蓝）。</summary>
 public sealed class SourceToBrushConverter : IValueConverter
 {
     private static readonly Brush GitHub = Freeze(new SolidColorBrush(Color.FromRgb(0xA3, 0x71, 0xF7)));
     private static readonly Brush WinGet = Freeze(new SolidColorBrush(Color.FromRgb(0x2F, 0xD9, 0xC4)));
     private static readonly Brush Custom = Freeze(new SolidColorBrush(Color.FromRgb(0xD2, 0x99, 0x22)));
+    private static readonly Brush BaiduPan = Freeze(new SolidColorBrush(Color.FromRgb(0x38, 0xBD, 0xF8)));
 
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         => value switch
         {
             SourceKind.WinGet => WinGet,
             SourceKind.Custom => Custom,
+            SourceKind.BaiduPan => BaiduPan,
             _ => GitHub,
         };
 

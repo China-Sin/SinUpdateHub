@@ -161,6 +161,7 @@ public sealed class BaiduPanViewModel : ObservableObject
         OpenDownloadDirCommand = new RelayCommand(OpenDownloadDir);
         DownloadSelectedCommand = new AsyncRelayCommand(DownloadSelectedAsync, () => IsLoggedIn && !IsBusy && !IsTransferring && Items.Count > 0);
         DownloadCurrentFolderCommand = new AsyncRelayCommand(DownloadCurrentFolderAsync, () => IsLoggedIn && !IsBusy && !IsTransferring && Items.Count > 0);
+        AddSelectedToDownloadListCommand = new AsyncRelayCommand(AddSelectedToDownloadListAsync, () => IsLoggedIn && !IsBusy && !IsTransferring && Items.Count > 0);
         UploadFilesCommand = new AsyncRelayCommand(UploadFilesAsync, () => IsLoggedIn && !IsBusy && !IsTransferring);
         CancelDownloadCommand = new RelayCommand(CancelTransfer, () => IsTransferring);
 
@@ -175,6 +176,9 @@ public sealed class BaiduPanViewModel : ObservableObject
 
     /// <summary>请求主窗口弹出多文件选择器，返回待上传的本地路径数组（取消返回 null）。</summary>
     public Func<string[]?>? PickFilesRequested { get; set; }
+
+    /// <summary>批量将勾选的网盘文件/文件夹添加到「软件下载」列表，返回 (新增数, 跳过已存在数)。</summary>
+    public Func<IReadOnlyList<BaiduFileEntry>, Task<(int Added, int Skipped)>>? AddToDownloadListRequested { get; set; }
 
     public Action<string, string>? ShowMessage { get; set; }
 
@@ -350,6 +354,7 @@ public sealed class BaiduPanViewModel : ObservableObject
     public ICommand OpenDownloadDirCommand { get; }
     public ICommand DownloadSelectedCommand { get; }
     public ICommand DownloadCurrentFolderCommand { get; }
+    public ICommand AddSelectedToDownloadListCommand { get; }
     public ICommand UploadFilesCommand { get; }
     public ICommand CancelDownloadCommand { get; }
 
@@ -519,6 +524,37 @@ public sealed class BaiduPanViewModel : ObservableObject
 
         CurrentDir = item.Path;
         await RefreshDirAsync();
+    }
+
+    /// <summary>供「软件下载」页跳转定位到指定网盘目录。</summary>
+    public async Task NavigateToDirectoryAsync(string remoteDir)
+    {
+        CurrentDir = BaiduPanService.NormalizeRemoteDir(remoteDir);
+        if (IsLoggedIn && !IsBusy && !IsTransferring)
+        {
+            await RefreshDirAsync();
+        }
+    }
+
+    private async Task AddSelectedToDownloadListAsync()
+    {
+        var selected = Items.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
+        if (selected.Count == 0)
+        {
+            ShowMessage?.Invoke("未选择项目", "请先勾选要添加到「软件下载」列表的网盘文件夹或文件（支持多选批量添加）。");
+            return;
+        }
+
+        if (AddToDownloadListRequested is null)
+        {
+            return;
+        }
+
+        var (added, skipped) = await AddToDownloadListRequested.Invoke(selected);
+        SetAllSelected(false);
+        StatusMessage = skipped > 0
+            ? $"已添加 {added} 项到「软件下载」列表（跳过 {skipped} 项已存在）"
+            : $"已添加 {added} 项到「软件下载」列表，可在左侧「软件下载」页直接一键下载";
     }
 
     private async Task GoParentAsync()
@@ -1009,6 +1045,7 @@ public sealed class BaiduPanViewModel : ObservableObject
         (ChooseDownloadDirCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (DownloadSelectedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (DownloadCurrentFolderCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        (AddSelectedToDownloadListCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (UploadFilesCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (CancelDownloadCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }

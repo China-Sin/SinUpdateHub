@@ -134,8 +134,8 @@ public sealed class UpdateChecker
         ArgumentNullException.ThrowIfNull(entry);
         ArgumentNullException.ThrowIfNull(update);
 
-        // 官网/手动来源：没有自动版本号，状态保持"未检查/手动"，不算失败
-        if (entry.Source == SourceKind.Custom)
+        // 官网/手动与百度网盘来源：没有自动版本号，状态保持"未检查/手动"，不算失败
+        if (entry.Source.IsDownloadSource())
         {
             return UpdateState.Unknown;
         }
@@ -168,11 +168,11 @@ public sealed class UpdateChecker
 
         entry.LastCheckedAt = result.CheckedAt;
 
-        // 官网/手动来源：只记录检查时间，不动版本/下载地址
-        if (entry.Source == SourceKind.Custom)
+        // 官网/手动与百度网盘来源：只记录检查时间，不动版本/下载地址
+        if (entry.Source.IsDownloadSource())
         {
             entry.LastError = result.State == UpdateState.Failed ? (result.Error ?? "检查失败") : null;
-            if (!string.IsNullOrWhiteSpace(result.Update?.HomepageUrl))
+            if (entry.Source == SourceKind.Custom && !string.IsNullOrWhiteSpace(result.Update?.HomepageUrl))
             {
                 entry.HomepageUrl = result.Update!.HomepageUrl;
             }

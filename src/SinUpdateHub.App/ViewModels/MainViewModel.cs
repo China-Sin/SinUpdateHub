@@ -115,6 +115,8 @@ public sealed class MainViewModel : ObservableObject
     private string _searchText = string.Empty;
     private AppFilter _filter = AppFilter.All;
     private SourceKind? _sourceFilter;
+    private SourceKind? _downloadSourceFilter;
+    private readonly HashSet<string> _activeBaiduDownloadIds = new(StringComparer.Ordinal);
     private bool _isBusy;
     private string _busyText = string.Empty;
     private string _statusText = "点「检查全部更新」开始检查";
@@ -159,15 +161,18 @@ public sealed class MainViewModel : ObservableObject
         NotesPage.Confirm = (title, message) => Confirm?.Invoke(title, message) ?? false;
         BaiduPanPage.ShowMessage = (title, message) => ShowMessage?.Invoke(title, message);
         BaiduPanPage.Confirm = (title, message) => Confirm?.Invoke(title, message) ?? false;
+        BaiduPanPage.AddToDownloadListRequested = AddBaiduEntriesToDownloadListAsync;
 
         CheckAllCommand = new AsyncRelayCommand(CheckAllAsync, () => !IsBusy && Entries.Any(BelongsToCurrentListPage));
         UpdateAllCommand = new AsyncRelayCommand(UpdateAllAsync, () => !IsBusy && UpdatableCount > 0);
         AddEntryCommand = new AsyncRelayCommand(AddEntryAsync);
         OpenSettingsCommand = new AsyncRelayCommand(ShowSettingsAsync);
         OpenBackupCommand = new AsyncRelayCommand(ShowBackupAsync);
+        OpenBaiduPanCommand = new AsyncRelayCommand(OpenBaiduPanAsync);
         ShowAppsCommand = new RelayCommand(() => SetPage(MainPage.Apps));
         SelectFilterCommand = new RelayCommand(SelectFilter);
         SelectSourceCommand = new RelayCommand(SelectSource);
+        SelectDownloadSourceCommand = new RelayCommand(SelectDownloadSource);
         ClearSearchCommand = new RelayCommand(() => SearchText = string.Empty);
         RefreshCommand = new RelayCommand(ReloadFromStore);
 
@@ -200,6 +205,14 @@ public sealed class MainViewModel : ObservableObject
             new(SourceKind.WinGet, "WinGet"),
         };
         SourceFilters[0].IsSelected = true;
+
+        DownloadSourceFilters = new ObservableCollection<SourceFilterChip>
+        {
+            new(null, "全部来源"),
+            new(SourceKind.Custom, "官网"),
+            new(SourceKind.BaiduPan, "网盘"),
+        };
+        DownloadSourceFilters[0].IsSelected = true;
 
         EntriesView = CollectionViewSource.GetDefaultView(Entries);
         EntriesView.Filter = FilterPredicate;
@@ -255,7 +268,8 @@ public sealed class MainViewModel : ObservableObject
                     nameof(IsSettingsPage),
                     nameof(ShowSourceFilters),
                     nameof(PageTitle),
-                    nameof(PageSubtitle));
+                    nameof(PageSubtitle),
+                    nameof(EmptyStateSubtitle));
                 foreach (var item in NavItems)
                 {
                     item.IsSelected = item.Page == value;
@@ -339,15 +353,44 @@ public sealed class MainViewModel : ObservableObject
     };
 
     public string PageSubtitle => _currentPage == MainPage.Official
-        ? "软件官网 / 网盘手动下载列表"
+        ? "软件官网 / 百度网盘直达下载列表"
         : AppSubtitle;
+
+    public string EmptyStateSubtitle => _currentPage == MainPage.Official
+        ? "点「添加软件」填写官网链接，或在「百度网盘」勾选文件夹/文件批量添加到这里"
+        : "点「添加软件」填一条 GitHub 仓库或 WinGet 包 ID 就能开始管理版本";
 
     private bool BelongsToCurrentListPage(EntryViewModel vm)
         => _currentPage == MainPage.Official
-            ? vm.Entry.Source == SourceKind.Custom
-            : vm.Entry.Source != SourceKind.Custom;
+            ? vm.Entry.Source.IsDownloadSource()
+            : !vm.Entry.Source.IsDownloadSource();
 
     private void SetPage(MainPage page) => CurrentPage = page;
+
+    private async Task OpenBaiduPanAsync()
+    {
+        SetPage(MainPage.BaiduPan);
+        try
+        {
+            await BaiduPanPage.OnShownAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write("打开百度网盘页失败", ex);
+        }
+    }
+
+    private async Task NavigateBaiduPanDirAsync(string remoteDir)
+    {
+        try
+        {
+            await BaiduPanPage.NavigateToDirectoryAsync(remoteDir);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"跳转百度网盘目录失败：{remoteDir}", ex);
+        }
+    }
 
     private async Task ShowSettingsAsync()
     {
@@ -377,6 +420,8 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<FilterChip> Filters { get; }
 
     public ObservableCollection<SourceFilterChip> SourceFilters { get; }
+
+    public ObservableCollection<SourceFilterChip> DownloadSourceFilters { get; }
 
     public bool IsEmpty => !Entries.Any(BelongsToCurrentListPage);
 
@@ -490,9 +535,11 @@ public sealed class MainViewModel : ObservableObject
     public ICommand AddEntryCommand { get; }
     public ICommand OpenSettingsCommand { get; }
     public ICommand OpenBackupCommand { get; }
+    public ICommand OpenBaiduPanCommand { get; }
     public ICommand ShowAppsCommand { get; }
     public ICommand SelectFilterCommand { get; }
     public ICommand SelectSourceCommand { get; }
+    public ICommand SelectDownloadSourceCommand { get; }
     public ICommand ClearSearchCommand { get; }
     public ICommand RefreshCommand { get; }
 
@@ -703,6 +750,12 @@ public sealed class MainViewModel : ObservableObject
                 {
                     StatusText = $"「{vm.Name}」软件尚未安装，远端最新 {result.Update?.Version}，可点「安装」直接安装";
                 }
+                else if (vm.Entry.Source == SourceKind.BaiduPan)
+                {
+                    StatusText = result.State == UpdateState.Failed
+                        ? $"「{vm.Name}」检查失败：{result.Error}"
+                        : $"「{vm.Name}」软件尚未安装，可点「网盘下载」直接下载";
+                }
                 else if (vm.Entry.Source == SourceKind.Custom)
                 {
                     StatusText = result.State == UpdateState.Failed
@@ -722,7 +775,7 @@ public sealed class MainViewModel : ObservableObject
                     ? $"「{vm.Name}」本机未检测到已安装版本（可能已卸载），远端最新 {result.Update?.Version}，可点「更新」安装"
                     : $"「{vm.Name}」本机未检测到已安装版本，远端最新 {result.Update?.Version}（可点「更新」安装）";
             }
-            else if (missingLocally && hadVersionBefore && vm.Entry.Source == SourceKind.Custom)
+            else if (missingLocally && hadVersionBefore && vm.Entry.Source.IsDownloadSource())
             {
                 StatusText = $"「{vm.Name}」本机未检测到已安装版本（可能已卸载）";
             }
@@ -749,6 +802,13 @@ public sealed class MainViewModel : ObservableObject
 
     public async Task UpdateOneAsync(EntryViewModel vm)
     {
+        // 百度网盘来源：直接通过网盘接口一键下载文件夹/文件（支持断点续传与跳过已存在）
+        if (vm.Entry.Source == SourceKind.BaiduPan)
+        {
+            await DownloadBaiduEntryAsync(vm);
+            return;
+        }
+
         // 手动/软件下载来源：没有自动下载链接，直接打开网页
         if (vm.Entry.Source == SourceKind.Custom)
         {
@@ -1541,11 +1601,337 @@ public sealed class MainViewModel : ObservableObject
         _services.Data.Entries.Add(created);
         Persist();
         RefreshStats();
-        StatusText = created.Source == SourceKind.Custom
+        StatusText = created.Source.IsDownloadSource()
             ? $"已添加「{vm.Name}」到软件下载列表"
             : $"已添加「{vm.Name}」，点它卡片上的「检查」获取新版本";
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>从百度网盘页批量添加选中的文件夹/文件到「软件下载」列表（按网盘路径去重）。</summary>
+    private async Task<(int Added, int Skipped)> AddBaiduEntriesToDownloadListAsync(IReadOnlyList<BaiduFileEntry> items)
+    {
+        var existingPaths = new HashSet<string>(
+            Entries
+                .Where(e => e.Entry.Source == SourceKind.BaiduPan && !string.IsNullOrWhiteSpace(e.Entry.RepoUrl))
+                .Select(e => BaiduPanService.NormalizeRemoteDir(e.Entry.RepoUrl)),
+            StringComparer.OrdinalIgnoreCase);
+
+        var addedVms = new List<EntryViewModel>();
+        var skipped = 0;
+
+        foreach (var item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.Path))
+            {
+                continue;
+            }
+
+            var normalized = BaiduPanService.NormalizeRemoteDir(item.Path);
+            if (!existingPaths.Add(normalized))
+            {
+                skipped++;
+                continue;
+            }
+
+            var name = !string.IsNullOrWhiteSpace(item.Name)
+                ? item.Name.Trim()
+                : normalized == "/" ? "百度网盘" : Path.GetFileName(normalized.TrimEnd('/'));
+
+            var entry = new AppEntry
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = name,
+                Source = SourceKind.BaiduPan,
+                RepoUrl = normalized,
+                Package = item.IsDir ? "dir" : "file",
+                Remark = item.IsDir ? "百度网盘文件夹" : "百度网盘文件",
+            };
+
+            var vm = new EntryViewModel(this, entry);
+            Entries.Add(vm);
+            _services.Data.Entries.Add(entry);
+            addedVms.Add(vm);
+        }
+
+        if (addedVms.Count > 0)
+        {
+            try
+            {
+                await _services.Detector.ScanInstalledAsync(forceRefresh: false);
+                foreach (var vm in addedVms)
+                {
+                    await RefreshCurrentVersionFromInstalledAsync(vm, forceScan: false, clearWhenMissing: false);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("批量添加网盘条目时自动识别本机安装状态失败（不影响添加）", ex);
+            }
+
+            Persist();
+            RefreshStats();
+            BackupPage.RefreshSummaryTexts();
+            StatusText = skipped > 0
+                ? $"已添加 {addedVms.Count} 个百度网盘项目到「软件下载」列表（跳过 {skipped} 个已存在）"
+                : $"已添加 {addedVms.Count} 个百度网盘项目到「软件下载」列表";
+        }
+
+        return (addedVms.Count, skipped);
+    }
+
+    private string ResolveBaiduDownloadDir()
+    {
+        if (!string.IsNullOrWhiteSpace(_services.Settings.BaiduDownloadDir))
+        {
+            return _services.Settings.BaiduDownloadDir.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(_services.Settings.DownloadDir))
+        {
+            return _services.Settings.DownloadDir.Trim();
+        }
+
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SinUpdateHub",
+            "downloads");
+    }
+
+    /// <summary>在「软件下载」页一键下载百度网盘条目（支持整个文件夹递归下载、断点续传、已存在跳过与行内进度）。</summary>
+    private async Task DownloadBaiduEntryAsync(EntryViewModel vm)
+    {
+        var rawPath = vm.Entry.RepoUrl?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(rawPath))
+        {
+            ShowMessage?.Invoke("没有网盘路径", $"「{vm.Name}」还没有填写百度网盘路径，请点「编辑」补上。");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_services.Settings.BaiduAccessToken))
+        {
+            var goLogin = Confirm?.Invoke(
+                "尚未登录百度网盘",
+                $"下载「{vm.Name}」需要先登录百度网盘。\n是否立即跳转到「百度网盘」页面进行登录？") ?? false;
+            if (goLogin)
+            {
+                await OpenBaiduPanAsync();
+            }
+
+            return;
+        }
+
+        if (!_activeBaiduDownloadIds.Add(vm.Entry.Id))
+        {
+            StatusText = $"「{vm.Name}」正在下载中，请稍候…";
+            return;
+        }
+
+        var remotePath = BaiduPanService.NormalizeRemoteDir(rawPath);
+        var isSingleFile = string.Equals(vm.Entry.Package, "file", StringComparison.OrdinalIgnoreCase);
+        var saveRoot = ResolveBaiduDownloadDir();
+        Directory.CreateDirectory(saveRoot);
+
+        vm.MarkDownloading(true);
+        vm.SetProgress(0, "正在读取网盘目录…");
+        StatusText = $"正在扫描百度网盘「{vm.Name}」({remotePath})…";
+
+        try
+        {
+            var parentDir = BaiduPanService.GetParentDir(remotePath);
+            var itemName = remotePath == "/" ? "百度网盘" : Path.GetFileName(remotePath.TrimEnd('/'));
+            List<BaiduDownloadTaskItem> tasks;
+
+            if (isSingleFile)
+            {
+                var siblings = await _services.BaiduPan.ListFilesAsync(
+                    _services.Settings,
+                    parentDir,
+                    () => _services.SaveSettings());
+                var matched = siblings.FirstOrDefault(f =>
+                                  string.Equals(BaiduPanService.NormalizeRemoteDir(f.Path), remotePath, StringComparison.OrdinalIgnoreCase))
+                              ?? siblings.FirstOrDefault(f =>
+                                  !f.IsDir && string.Equals(f.Name, itemName, StringComparison.OrdinalIgnoreCase));
+                if (matched is null)
+                {
+                    throw new InvalidOperationException($"在百度网盘未找到文件：{remotePath}\n可能已被移动或删除。");
+                }
+
+                tasks = await _services.BaiduPan.CollectFilesRecursiveAsync(
+                    _services.Settings,
+                    new[] { matched },
+                    parentDir,
+                    () => _services.SaveSettings());
+            }
+            else
+            {
+                var dirEntry = new BaiduFileEntry
+                {
+                    Path = remotePath,
+                    Name = itemName,
+                    IsDir = true,
+                };
+
+                try
+                {
+                    tasks = await _services.BaiduPan.CollectFilesRecursiveAsync(
+                        _services.Settings,
+                        new[] { dirEntry },
+                        parentDir,
+                        () => _services.SaveSettings());
+                }
+                catch (InvalidOperationException) when (remotePath != "/")
+                {
+                    // 兼容用户手动填写的是单个文件路径：回退到父目录查找该文件
+                    var siblings = await _services.BaiduPan.ListFilesAsync(
+                        _services.Settings,
+                        parentDir,
+                        () => _services.SaveSettings());
+                    var matched = siblings.FirstOrDefault(f =>
+                        !f.IsDir && string.Equals(BaiduPanService.NormalizeRemoteDir(f.Path), remotePath, StringComparison.OrdinalIgnoreCase));
+                    if (matched is null)
+                    {
+                        throw;
+                    }
+
+                    isSingleFile = true;
+                    vm.Entry.Package = "file";
+                    vm.RefreshFromEntry();
+                    UpdateEntryReference(vm);
+                    Persist();
+                    tasks = await _services.BaiduPan.CollectFilesRecursiveAsync(
+                        _services.Settings,
+                        new[] { matched },
+                        parentDir,
+                        () => _services.SaveSettings());
+                }
+            }
+
+            if (tasks.Count == 0)
+            {
+                StatusText = $"「{vm.Name}」对应的网盘目录下没有可下载的文件";
+                ShowMessage?.Invoke("目录为空", $"网盘路径 {remotePath} 下没有找到可下载的文件。");
+                return;
+            }
+
+            vm.SetProgress(0, $"获取 {tasks.Count} 个文件链接…");
+            StatusText = $"正在获取「{vm.Name}」的 {tasks.Count} 个文件下载链接…";
+
+            var dlinks = await _services.BaiduPan.GetDownloadLinksAsync(
+                _services.Settings,
+                tasks.Select(t => t.File.FsId).ToList(),
+                () => _services.SaveSettings());
+
+            var succeeded = 0;
+            var skipped = 0;
+            var failedList = new List<string>();
+
+            for (var i = 0; i < tasks.Count; i++)
+            {
+                var task = tasks[i];
+                var fileIndex = i + 1;
+                if (!dlinks.TryGetValue(task.File.FsId, out var dlink) || string.IsNullOrWhiteSpace(dlink))
+                {
+                    failedList.Add($"{task.File.Name}（未获取到下载链接）");
+                    continue;
+                }
+
+                var targetPath = Path.Combine(saveRoot, task.RelativeLocalPath);
+                var fileProgress = new Progress<BaiduTransferProgress>(p =>
+                {
+                    var overall = Math.Clamp(((fileIndex - 1) + p.Fraction) / tasks.Count, 0.0, 1.0);
+                    if (!string.IsNullOrWhiteSpace(p.Message))
+                    {
+                        vm.SetProgress(overall, $"{fileIndex}/{tasks.Count} · {p.Message}");
+                        StatusText = $"网盘下载「{vm.Name}」[{fileIndex}/{tasks.Count}] {task.File.Name} · {p.Message}";
+                        return;
+                    }
+
+                    var speed = BaiduFileItemViewModel.FormatSpeed(p.BytesPerSecond);
+                    var eta = BaiduFileItemViewModel.FormatEta(p.EstimatedRemaining);
+                    var sizeInfo = p.TotalBytes is > 0
+                        ? $"{BaiduFileItemViewModel.FormatSize(p.TransferredBytes)} / {BaiduFileItemViewModel.FormatSize(p.TotalBytes.Value)}"
+                        : BaiduFileItemViewModel.FormatSize(p.TransferredBytes);
+                    var rowSummary = string.IsNullOrWhiteSpace(speed)
+                        ? $"{fileIndex}/{tasks.Count} · {p.Fraction:P0}"
+                        : $"{fileIndex}/{tasks.Count} · {p.Fraction:P0} · {speed}";
+                    vm.SetProgress(overall, rowSummary);
+
+                    var detailTail = string.Join(" · ", new[] { sizeInfo, speed, eta }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                    var resumeTag = p.IsResumed ? "续传 · " : string.Empty;
+                    StatusText = $"网盘下载「{vm.Name}」[{fileIndex}/{tasks.Count}] {task.File.Name} ({resumeTag}{p.Fraction:P0} · {detailTail})";
+                });
+
+                StatusText = $"网盘下载「{vm.Name}」[{fileIndex}/{tasks.Count}] {task.File.Name} …";
+                try
+                {
+                    var dlRes = await _services.BaiduPan.DownloadFileAsync(
+                        _services.Settings,
+                        dlink,
+                        targetPath,
+                        task.File.Size,
+                        fileProgress,
+                        () => _services.SaveSettings());
+                    if (dlRes.SkippedExisting)
+                    {
+                        skipped++;
+                    }
+                    else
+                    {
+                        succeeded++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Write($"软件下载页下载百度网盘文件失败：{task.File.Path}", ex);
+                    failedList.Add($"{task.File.Name}（{ex.Message}）");
+                }
+            }
+
+            var safeFolderName = AssetMatcher.Sanitize(itemName);
+            var folderLocalDir = !isSingleFile && !string.IsNullOrWhiteSpace(safeFolderName)
+                ? Path.Combine(saveRoot, safeFolderName)
+                : saveRoot;
+            var openDir = Directory.Exists(folderLocalDir) ? folderLocalDir : saveRoot;
+            var skippedText = skipped > 0 ? $"，跳过已存在 {skipped} 个" : string.Empty;
+
+            if (failedList.Count == 0)
+            {
+                StatusText = $"「{vm.Name}」网盘下载完成：新下载 {succeeded} 个{skippedText}（{openDir}）";
+                var openNow = Confirm?.Invoke(
+                    "网盘下载完成",
+                    $"「{vm.Name}」已下载完成（新下载 {succeeded} 个{skippedText}）。\n\n保存位置：\n{openDir}\n\n是否立即打开下载文件夹？") ?? false;
+                if (openNow)
+                {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo { FileName = openDir, UseShellExecute = true });
+                    }
+                    catch (Exception ex)
+                    {
+                        AppLog.Write("打开网盘下载目录失败", ex);
+                    }
+                }
+            }
+            else
+            {
+                StatusText = $"「{vm.Name}」网盘下载结束：成功 {succeeded} 个{skippedText}，失败 {failedList.Count} 个";
+                ShowMessage?.Invoke(
+                    "部分文件下载失败",
+                    $"「{vm.Name}」成功 {succeeded} 个{skippedText}，失败 {failedList.Count} 个：\n" + string.Join("\n", failedList.Take(8)));
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"软件下载页百度网盘下载失败：{vm.Name} ({remotePath})", ex);
+            StatusText = $"「{vm.Name}」网盘下载失败：{ex.Message}";
+            ShowMessage?.Invoke("网盘下载失败", ex.Message);
+        }
+        finally
+        {
+            vm.MarkDownloading(false);
+            _activeBaiduDownloadIds.Remove(vm.Entry.Id);
+        }
     }
 
     public void EditEntry(EntryViewModel vm)
@@ -1603,6 +1989,25 @@ public sealed class MainViewModel : ObservableObject
     public void OpenInstallDir(EntryViewModel vm)
     {
         var dir = vm.Entry.InstallDir;
+        if (string.IsNullOrWhiteSpace(dir) && vm.Entry.Source == SourceKind.BaiduPan)
+        {
+            var saveRoot = ResolveBaiduDownloadDir();
+            var remotePath = BaiduPanService.NormalizeRemoteDir(vm.Entry.RepoUrl);
+            var itemName = remotePath == "/" ? string.Empty : AssetMatcher.Sanitize(Path.GetFileName(remotePath.TrimEnd('/')));
+            var isFile = string.Equals(vm.Entry.Package, "file", StringComparison.OrdinalIgnoreCase);
+            var candidate = !isFile && !string.IsNullOrWhiteSpace(itemName)
+                ? Path.Combine(saveRoot, itemName)
+                : saveRoot;
+            if (Directory.Exists(candidate))
+            {
+                dir = candidate;
+            }
+            else if (Directory.Exists(saveRoot))
+            {
+                dir = saveRoot;
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(dir))
         {
             ShowMessage?.Invoke("没有安装目录", $"「{vm.Name}」还没有设置安装目录。\n可以点「编辑」→「自动识别」补上。");
@@ -1680,6 +2085,24 @@ public sealed class MainViewModel : ObservableObject
 
     public void OpenReleasePage(EntryViewModel vm)
     {
+        if (vm.Entry.Source == SourceKind.BaiduPan)
+        {
+            var rawPath = vm.Entry.RepoUrl?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(rawPath))
+            {
+                ShowMessage?.Invoke("没有网盘路径", $"「{vm.Name}」还没有填写百度网盘路径，请点「编辑」补上。");
+                return;
+            }
+
+            var normalized = BaiduPanService.NormalizeRemoteDir(rawPath);
+            var targetDir = string.Equals(vm.Entry.Package, "file", StringComparison.OrdinalIgnoreCase)
+                ? BaiduPanService.GetParentDir(normalized)
+                : normalized;
+            SetPage(MainPage.BaiduPan);
+            _ = NavigateBaiduPanDirAsync(targetDir);
+            return;
+        }
+
         // WinGet 条目：优先打开软件官网（清单链接过期时可直接手动下载）；GitHub 用 Releases
         var url = ResolvePageUrl(vm);
 
@@ -1723,7 +2146,13 @@ public sealed class MainViewModel : ObservableObject
             $"新版本：{e.LatestVersion}",
             $"安装目录：{e.InstallDir}",
             $"来源：{vm.SourceText}",
-            e.Source == SourceKind.GitHub ? $"仓库：{e.RepoUrl}" : string.Empty);
+            e.Source switch
+            {
+                SourceKind.GitHub => $"仓库：{e.RepoUrl}",
+                SourceKind.BaiduPan => $"网盘路径：{e.RepoUrl}",
+                SourceKind.Custom => $"下载页：{e.HomepageUrl}",
+                _ => string.Empty,
+            });
 
         try
         {
@@ -1739,9 +2168,12 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>改选 GitHub Assets 里的安装包。</summary>
     public async Task ChooseAssetAsync(EntryViewModel vm)
     {
-        if (vm.Entry.Source == SourceKind.Custom)
+        if (vm.Entry.Source.IsDownloadSource())
         {
-            ShowMessage?.Invoke("官网/手动来源", $"「{vm.Name}」是官网/手动来源，没有可选的安装包；请直接点「更新」打开官网下载。");
+            var msg = vm.Entry.Source == SourceKind.BaiduPan
+                ? $"「{vm.Name}」是百度网盘来源，请直接点「网盘下载」下载到本地，或点「更多操作 → 打开网盘目录」查看。"
+                : $"「{vm.Name}」是官网/手动来源，没有可选的安装包；请直接点「打开网页」前往官网下载。";
+            ShowMessage?.Invoke("无需改选安装包", msg);
             return;
         }
 
@@ -1828,6 +2260,23 @@ public sealed class MainViewModel : ObservableObject
         foreach (var item in SourceFilters)
         {
             item.IsSelected = item.Value == _sourceFilter;
+        }
+
+        EntriesView.Refresh();
+    }
+
+    /// <summary>软件下载页来源筛选（全部来源 / 官网 / 网盘）。</summary>
+    private void SelectDownloadSource(object? parameter)
+    {
+        if (parameter is not SourceFilterChip chip)
+        {
+            return;
+        }
+
+        _downloadSourceFilter = chip.Value;
+        foreach (var item in DownloadSourceFilters)
+        {
+            item.IsSelected = item.Value == _downloadSourceFilter;
         }
 
         EntriesView.Refresh();
@@ -1922,6 +2371,11 @@ public sealed class MainViewModel : ObservableObject
         }
 
         if (ShowSourceFilters && _sourceFilter is not null && vm.Entry.Source != _sourceFilter.Value)
+        {
+            return false;
+        }
+
+        if (_currentPage == MainPage.Official && _downloadSourceFilter is not null && vm.Entry.Source != _downloadSourceFilter.Value)
         {
             return false;
         }

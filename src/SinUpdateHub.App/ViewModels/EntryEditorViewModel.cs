@@ -128,7 +128,7 @@ public sealed class EntryEditorViewModel : ObservableObject
         {
             if (SetProperty(ref _source, value))
             {
-                RaisePropertyChanged(nameof(IsGitHub), nameof(IsWinGet), nameof(IsCustom), nameof(SourceHint), nameof(PackageLabel), nameof(PackageHint), nameof(ShowRegexOption), nameof(RepoPlaceholder), nameof(ShowPackageSearch), nameof(ShowPackageSection));
+                RaisePropertyChanged(nameof(IsGitHub), nameof(IsWinGet), nameof(IsCustom), nameof(IsBaiduPan), nameof(SourceHint), nameof(PackageLabel), nameof(PackageHint), nameof(ShowRegexOption), nameof(RepoPlaceholder), nameof(ShowPackageSearch), nameof(ShowPackageSection));
                 (SearchPackageCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
         }
@@ -171,10 +171,27 @@ public sealed class EntryEditorViewModel : ObservableObject
         }
     }
 
+    /// <summary>百度网盘来源（归属「软件下载」页，RepoUrl 存网盘路径）。</summary>
+    public bool IsBaiduPan
+    {
+        get => _source == SourceKind.BaiduPan;
+        set
+        {
+            if (value)
+            {
+                Source = SourceKind.BaiduPan;
+                if (string.IsNullOrWhiteSpace(Package))
+                {
+                    Package = "dir";
+                }
+            }
+        }
+    }
+
     public bool ShowRegexOption => _source == SourceKind.GitHub;
 
-    /// <summary>官网/手动来源不需要「包」字段。</summary>
-    public bool ShowPackageSection => _source != SourceKind.Custom;
+    /// <summary>官网/手动与百度网盘来源不需要「包」筛选字段。</summary>
+    public bool ShowPackageSection => !_source.IsDownloadSource();
 
     public string SourceHint => _source switch
     {
@@ -182,6 +199,8 @@ public sealed class EntryEditorViewModel : ObservableObject
             "GitHub 来源：填仓库地址，自动读取 Releases 最新版本，再按「包」筛选 Assets 里的安装包文件名。",
         SourceKind.WinGet =>
             "WinGet 来源：不用记包 ID——填好项目名称后点「搜索包 ID」或「自动识别」，会自动从 WinGet 官方索引里找到包 ID，并读取最新版本与安装包直链（不需要本机装 winget）。",
+        SourceKind.BaiduPan =>
+            "百度网盘来源：在「软件下载」页展示，填写网盘文件或文件夹路径（如 /资源/电脑/Voicemeeter），点击「网盘下载」可直接断点续传下载到本地。",
         _ =>
             "官网/手动来源：WinGet 清单和 GitHub 都没有的软件用这个（如 NVIDIA Broadcast）。填官网下载页；检查时只刷新本机当前版本，「更新」= 打开官网下载页，由你手动下载安装。",
     };
@@ -487,6 +506,20 @@ public sealed class EntryEditorViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(entry.Name))
         {
             return "请填写项目名称。";
+        }
+
+        if (entry.Source == SourceKind.BaiduPan)
+        {
+            if (string.IsNullOrWhiteSpace(entry.RepoUrl))
+            {
+                return "百度网盘来源必须填写网盘路径，例如 /资源/电脑/Voicemeeter";
+            }
+
+            entry.RepoUrl = BaiduPanService.NormalizeRemoteDir(entry.RepoUrl);
+            if (!string.Equals(entry.Package, "file", StringComparison.OrdinalIgnoreCase))
+            {
+                entry.Package = "dir";
+            }
         }
 
         if (entry.Source == SourceKind.Custom)

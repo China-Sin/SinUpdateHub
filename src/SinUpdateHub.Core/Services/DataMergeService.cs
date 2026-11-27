@@ -75,8 +75,8 @@ public static class DataMergeService
             pickedSections.Add(clonedSec);
         }
 
-        var restoredApps = pickedEntries.Count(e => e.Source != SourceKind.Custom);
-        var restoredDownloads = pickedEntries.Count(e => e.Source == SourceKind.Custom);
+        var restoredApps = pickedEntries.Count(e => !e.Source.IsDownloadSource());
+        var restoredDownloads = pickedEntries.Count(e => e.Source.IsDownloadSource());
 
         AppData result;
         if (selection.Mode == RestoreMode.Replace)

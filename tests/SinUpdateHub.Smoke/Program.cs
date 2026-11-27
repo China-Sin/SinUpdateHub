@@ -1856,6 +1856,51 @@ internal sealed class SmokeRunner
                 "ManualSourceProvider：不可达网页（HTTP 404）返回 UpdateState.Failed（检查失败）",
                 notFoundResult.State == UpdateState.Failed && (notFoundResult.Error?.Contains("404", StringComparison.Ordinal) ?? false),
                 $"State={notFoundResult.State}, Error={notFoundResult.Error ?? "null"}");
+
+            // 百度网盘来源（SourceKind.BaiduPan）与软件下载清单兼容性断言
+            var baiduSvc = new BaiduPanService(factory);
+            var baiduProvider = new BaiduPanSourceProvider(baiduSvc, () => noProxySettings);
+            var baiduChecker = new UpdateChecker(new IUpdateSourceProvider[] { manual, baiduProvider });
+            var baiduEmptyRes = await baiduChecker.CheckOneAsync(new AppEntry
+            {
+                Name = "空网盘路径",
+                Source = SourceKind.BaiduPan,
+                RepoUrl = string.Empty,
+                Package = "dir",
+            });
+            var baiduValidRes = await baiduChecker.CheckOneAsync(new AppEntry
+            {
+                Name = "Voicemeeter",
+                Source = SourceKind.BaiduPan,
+                RepoUrl = "/资源/电脑/Voicemeeter",
+                Package = "dir",
+            });
+            var mergeTarget = new AppData();
+            var mergeSource = new AppData
+            {
+                Entries = new List<AppEntry>
+                {
+                    new() { Id = "bd-1", Name = "Voicemeeter", Source = SourceKind.BaiduPan, RepoUrl = "/资源/电脑/Voicemeeter", Package = "dir" },
+                    new() { Id = "gh-1", Name = "SampleGitHub", Source = SourceKind.GitHub, RepoUrl = RepoFreeType },
+                },
+            };
+            var (mergedData, mergeSummary) = DataMergeService.Apply(mergeTarget, mergeSource, new RestoreSelectionResult
+            {
+                SelectedEntryIds = new HashSet<string>(StringComparer.Ordinal) { "bd-1" },
+            });
+            Check(
+                "BaiduPanSourceProvider：来源归类为软件下载、空路径失败、未登录有效路径不报错且备份恢复归入软件下载",
+                SourceKind.BaiduPan.IsDownloadSource()
+                && SourceKind.Custom.IsDownloadSource()
+                && !SourceKind.GitHub.IsDownloadSource()
+                && baiduEmptyRes.State == UpdateState.Failed
+                && baiduValidRes.State == UpdateState.Unknown
+                && string.IsNullOrWhiteSpace(baiduValidRes.Error)
+                && mergeSummary.RestoredDownloadsCount == 1
+                && mergeSummary.RestoredAppsCount == 0
+                && mergedData.Entries.Count == 1
+                && mergedData.Entries[0].Source == SourceKind.BaiduPan,
+                $"empty={baiduEmptyRes.State}, valid={baiduValidRes.State}/{baiduValidRes.Error}, mergedDownloads={mergeSummary.RestoredDownloadsCount}");
         }
         catch (Exception ex)
         {

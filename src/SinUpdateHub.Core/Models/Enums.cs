@@ -15,6 +15,15 @@ public enum SourceKind
 
     /// <summary>官网/手动：WinGet 和 GitHub 都没有的软件；HomepageUrl 填官网下载页，检查只刷新本机版本，「更新」= 打开官网。</summary>
     Custom = 2,
+
+    /// <summary>百度网盘：RepoUrl 存网盘文件夹/文件路径，Package 存 dir 或 file；在「软件下载」页展示，支持一键从网盘下载或直达网盘目录。</summary>
+    BaiduPan = 3,
+}
+
+public static class SourceKindExtensions
+{
+    /// <summary>是否属于「软件下载」页（官网/手动 + 百度网盘）。</summary>
+    public static bool IsDownloadSource(this SourceKind source) => source is SourceKind.Custom or SourceKind.BaiduPan;
 }
 
 /// <summary>条目的运行期检查状态（不落盘）。</summary>

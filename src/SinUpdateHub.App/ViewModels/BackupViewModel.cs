@@ -193,8 +193,8 @@ public sealed class BackupViewModel : ObservableObject
     {
         get
         {
-            var appCount = _services.Data.Entries.Count(e => e.Source != SourceKind.Custom);
-            var downloadCount = _services.Data.Entries.Count(e => e.Source == SourceKind.Custom);
+            var appCount = _services.Data.Entries.Count(e => !e.Source.IsDownloadSource());
+            var downloadCount = _services.Data.Entries.Count(e => e.Source.IsDownloadSource());
             var sections = _services.Data.NoteSections?.Count ?? 0;
             var pages = _services.Data.NoteSections?.Sum(s => s.Pages.Count) ?? 0;
             return $"软件列表 {appCount} 条 · 软件下载 {downloadCount} 条 · SinNote {sections} 分区 / {pages} 页";

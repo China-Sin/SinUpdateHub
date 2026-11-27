@@ -45,16 +45,20 @@ public sealed class EntryViewModel : ObservableObject
 
     public SourceKind Source => Entry.Source;
 
-    public bool IsCustomSource => Entry.Source == SourceKind.Custom;
+    /// <summary>是否属于「软件下载」页（官网/手动 或 百度网盘）。</summary>
+    public bool IsCustomSource => Entry.Source.IsDownloadSource();
+
+    public bool IsBaiduPanSource => Entry.Source == SourceKind.BaiduPan;
 
     public string SourceText => Entry.Source switch
     {
         SourceKind.GitHub => "GitHub",
         SourceKind.WinGet => "WinGet",
+        SourceKind.BaiduPan => "网盘",
         _ => "官网",
     };
 
-    /// <summary>GitHub 显示 owner/repo；WinGet 显示备注（包 ID 在「包」列里，不重复显示）。</summary>
+    /// <summary>GitHub 显示 owner/repo；WinGet 显示备注；官网显示域名；百度网盘显示远端路径。</summary>
     public string RepositoryText
     {
         get
@@ -62,6 +66,13 @@ public sealed class EntryViewModel : ObservableObject
             if (Entry.Source == SourceKind.WinGet)
             {
                 return Entry.Remark;
+            }
+
+            if (Entry.Source == SourceKind.BaiduPan)
+            {
+                var path = string.IsNullOrWhiteSpace(Entry.RepoUrl) ? "（未填网盘路径）" : Entry.RepoUrl;
+                var kindTag = string.Equals(Entry.Package, "file", StringComparison.OrdinalIgnoreCase) ? "文件" : "文件夹";
+                return $"{path}  [{kindTag}]";
             }
 
             if (Entry.Source == SourceKind.Custom)
@@ -85,6 +96,11 @@ public sealed class EntryViewModel : ObservableObject
     {
         get
         {
+            if (Entry.Source == SourceKind.BaiduPan)
+            {
+                return string.Equals(Entry.Package, "file", StringComparison.OrdinalIgnoreCase) ? "网盘文件" : "网盘文件夹";
+            }
+
             if (Entry.Source == SourceKind.Custom)
             {
                 return "手动来源";
@@ -142,7 +158,7 @@ public sealed class EntryViewModel : ObservableObject
 
     public bool HasError => !IsCustomSource && (!string.IsNullOrWhiteSpace(Entry.LastError) || _state == UpdateState.Failed);
 
-    public bool ShowLastChecked => !IsCustomSource && !HasError;
+    public bool ShowLastChecked => !IsCustomSource && !HasError && !_isDownloading;
 
     public string ErrorText => Entry.LastError ?? string.Empty;
 
@@ -153,7 +169,7 @@ public sealed class EntryViewModel : ObservableObject
     {
         get
         {
-            if (Entry.Source == SourceKind.Custom)
+            if (Entry.Source.IsDownloadSource())
             {
                 return IsNotInstalled ? 2 : 5;
             }
@@ -185,11 +201,22 @@ public sealed class EntryViewModel : ObservableObject
 
     public bool HasUpdate => _state == UpdateState.UpdateAvailable && !_isDownloading;
 
-    /// <summary>是否显示操作列的「更新/打开官网」按钮（官网来源没有自动版本，也要能点）。</summary>
-    public bool ShowUpdateAction => HasUpdate || IsCustomSource;
+    /// <summary>是否显示操作列的「更新/打开网页/网盘下载」按钮。</summary>
+    public bool ShowUpdateAction => !_isDownloading && (HasUpdate || IsCustomSource);
 
-    /// <summary>操作列按钮文字：手动来源显示「打开网页」，未安装显示「安装」。</summary>
-    public string UpdateButtonText => IsCustomSource ? "打开网页" : (IsNotInstalled ? "安装" : "更新");
+    /// <summary>操作列按钮文字：百度网盘显示「网盘下载」，官网来源显示「打开网页」，未安装显示「安装」。</summary>
+    public string UpdateButtonText => Entry.Source switch
+    {
+        SourceKind.BaiduPan => "网盘下载",
+        SourceKind.Custom => "打开网页",
+        _ => IsNotInstalled ? "安装" : "更新",
+    };
+
+    public string OpenSourceMenuHeader => IsBaiduPanSource ? "打开网盘目录" : "打开发布页";
+
+    public bool ShowOpenSourceMenu => !IsCustomSource || IsBaiduPanSource;
+
+    public bool HasTransferText => _isDownloading && !string.IsNullOrWhiteSpace(_transferText);
 
     public bool IsUpToDate => _state == UpdateState.UpToDate;
 
@@ -202,7 +229,7 @@ public sealed class EntryViewModel : ObservableObject
         {
             if (SetProperty(ref _isDownloading, value))
             {
-                RaisePropertyChanged(nameof(HasUpdate), nameof(ShowUpdateAction), nameof(IsBusyVisual));
+                RaisePropertyChanged(nameof(HasUpdate), nameof(ShowUpdateAction), nameof(IsBusyVisual), nameof(HasTransferText), nameof(ShowLastChecked));
             }
         }
     }
@@ -218,14 +245,20 @@ public sealed class EntryViewModel : ObservableObject
     public string? TransferText
     {
         get => _transferText;
-        private set => SetProperty(ref _transferText, value);
+        private set
+        {
+            if (SetProperty(ref _transferText, value))
+            {
+                OnPropertyChanged(nameof(HasTransferText));
+            }
+        }
     }
 
     public string StateText
     {
         get
         {
-            if (Entry.Source == SourceKind.Custom)
+            if (Entry.Source.IsDownloadSource())
             {
                 return IsNotInstalled ? "未安装" : "已安装";
             }
@@ -261,7 +294,7 @@ public sealed class EntryViewModel : ObservableObject
         get
         {
             var current = string.IsNullOrWhiteSpace(Entry.CurrentVersion) ? "?" : Entry.CurrentVersion;
-            if (Entry.Source == SourceKind.Custom)
+            if (Entry.Source.IsDownloadSource())
             {
                 return current;
             }
@@ -309,12 +342,12 @@ public sealed class EntryViewModel : ObservableObject
     public void RefreshFromEntry()
     {
         RaisePropertyChanged(
-            nameof(Name), nameof(Source), nameof(IsCustomSource), nameof(IsNotInstalled), nameof(SourceText),
+            nameof(Name), nameof(Source), nameof(IsCustomSource), nameof(IsBaiduPanSource), nameof(IsNotInstalled), nameof(SourceText),
             nameof(RepositoryText), nameof(PackageText), nameof(CurrentVersionText), nameof(LatestVersionText),
             nameof(HasCurrentVersion), nameof(InstallDirText), nameof(HasInstallDir), nameof(InstallArgsText),
             nameof(HasInstallArgs), nameof(MatchedAssetText), nameof(HasMatchedAsset), nameof(LastCheckedText),
             nameof(LastError), nameof(HasError), nameof(ShowLastChecked), nameof(ErrorText), nameof(StateText), nameof(StateSortOrder), nameof(VersionArrowText),
-            nameof(ShowUpdateAction), nameof(UpdateButtonText), nameof(SearchBlob));
+            nameof(ShowUpdateAction), nameof(UpdateButtonText), nameof(OpenSourceMenuHeader), nameof(ShowOpenSourceMenu), nameof(SearchBlob));
     }
 
     /// <summary>根据当前条目快照推导运行期状态。</summary>
@@ -325,7 +358,7 @@ public sealed class EntryViewModel : ObservableObject
             return;
         }
 
-        if (Entry.Source == SourceKind.Custom)
+        if (Entry.Source.IsDownloadSource())
         {
             SetState(IsNotInstalled ? UpdateState.Unknown : UpdateState.UpToDate);
             return;

@@ -14,8 +14,20 @@ public partial class AppListView : UserControl
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
-        Loaded += (_, _) => UpdatePageColumns();
+        Loaded += OnLoaded;
         Unloaded += (_, _) => Unsubscribe();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && !ReferenceEquals(_subscribedVm, vm))
+        {
+            Unsubscribe();
+            _subscribedVm = vm;
+            _subscribedVm.PageChanged += OnPageChanged;
+        }
+
+        UpdatePageColumns();
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)

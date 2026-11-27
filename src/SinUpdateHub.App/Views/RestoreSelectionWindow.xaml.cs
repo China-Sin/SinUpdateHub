@@ -100,7 +100,7 @@ internal sealed class SelectableSoftwareItem : ObservableObject
                 parts.Add($"v{Entry.CurrentVersion}");
             }
 
-            return parts.Count == 0 ? (Entry.Source == SourceKind.Custom ? "软件下载条目" : "软件列表条目") : string.Join(" · ", parts);
+            return parts.Count == 0 ? (Entry.Source.IsDownloadSource() ? "软件下载条目" : "软件列表条目") : string.Join(" · ", parts);
         }
     }
 
@@ -250,8 +250,8 @@ internal sealed class RestoreSelectionViewModel : ObservableObject
                 .Where(s => s.Pages.Count > 0)
                 .Select(s => new SelectableNoteSectionGroup(s, RefreshSummaries)));
 
-        var appCount = entries.Count(e => e.Source != SourceKind.Custom);
-        var downloadCount = entries.Count(e => e.Source == SourceKind.Custom);
+        var appCount = entries.Count(e => !e.Source.IsDownloadSource());
+        var downloadCount = entries.Count(e => e.Source.IsDownloadSource());
         var pageCount = NoteSectionGroups.Sum(g => g.Pages.Count);
         SourceSummaryText = $"备份共包含：软件列表 {appCount} 条 · 软件下载 {downloadCount} 条 · SinNote {NoteSectionGroups.Count} 分区 / {pageCount} 页";
 

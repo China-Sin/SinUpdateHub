@@ -371,7 +371,7 @@
                 </Border>
             </UniformGrid>
 
-            <!-- == 工具条 + 筛选芯片（软件下载页不显示） == -->
+            <!-- == 工具条 + 筛选芯片（软件列表） == -->
             <Grid Grid.Row="2"
                   Margin="0,0,0,12"
                   Visibility="{Binding IsAppsPage, Converter={StaticResource BoolToVis}}">
@@ -460,6 +460,60 @@
                             <DataTemplate>
                                 <Button Style="{StaticResource ChipButton}"
                                         Command="{Binding DataContext.SelectSourceCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding Label}">
+                                    <TextBlock Text="{Binding Label}" FontSize="12" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Grid>
+
+            <!-- == 软件下载页工具条（网盘快捷入口 + 来源筛选：全部来源 / 官网 / 网盘） == -->
+            <Grid Grid.Row="2"
+                  Margin="0,0,0,12"
+                  Visibility="{Binding IsOfficialPage, Converter={StaticResource BoolToVis}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource SecondaryButton}"
+                            Command="{Binding OpenBaiduPanCommand}"
+                            AutomationProperties.Name="从百度网盘添加">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource ButtonGlyph}" Text="&#xE896;" />
+                            <TextBlock Text="从百度网盘添加" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock Text="支持官网链接与百度网盘文件夹/文件，点击「网盘下载」可直接下载到本地"
+                               FontSize="11"
+                               Foreground="{StaticResource BrushTextMuted}"
+                               VerticalAlignment="Center"
+                               Margin="12,0,0,0" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="来源筛选："
+                               FontSize="11"
+                               Foreground="{StaticResource BrushTextMuted}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0" />
+                    <ItemsControl ItemsSource="{Binding DownloadSourceFilters}" VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource ChipButton}"
+                                        Command="{Binding DataContext.SelectDownloadSourceCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
                                         CommandParameter="{Binding}"
                                         AutomationProperties.Name="{Binding Label}">
                                     <TextBlock Text="{Binding Label}" FontSize="12" />
@@ -644,6 +698,13 @@
                                                      Maximum="1"
                                                      Style="{StaticResource InputProgress}"
                                                      Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}" />
+                                        <TextBlock Text="{Binding TransferText}"
+                                                   FontSize="10"
+                                                   Foreground="{StaticResource BrushTextSecondary}"
+                                                   Margin="14,2,0,0"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding TransferText}"
+                                                   Visibility="{Binding HasTransferText, Converter={StaticResource BoolToVis}}" />
                                     </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -708,9 +769,9 @@
                                                               Header="打开安装目录"
                                                               Command="{Binding OpenFolderCommand}" />
                                                     <MenuItem Style="{StaticResource DarkMenuItem}"
-                                                              Header="打开发布页"
+                                                              Header="{Binding OpenSourceMenuHeader}"
                                                               Command="{Binding OpenReleaseCommand}"
-                                                              Visibility="{Binding IsCustomSource, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                                                              Visibility="{Binding ShowOpenSourceMenu, Converter={StaticResource BoolToVis}}" />
                                                     <MenuItem Style="{StaticResource DarkMenuItem}"
                                                               Header="复制信息"
                                                               Command="{Binding CopyInfoCommand}" />
@@ -739,7 +800,7 @@
                                Foreground="{StaticResource BrushText}"
                                HorizontalAlignment="Center"
                                Margin="0,14,0,0" />
-                    <TextBlock Text="点「添加软件」填一条 GitHub 仓库或 WinGet 包 ID 就能开始管理版本"
+                    <TextBlock Text="{Binding EmptyStateSubtitle}"
                                FontSize="12"
                                Foreground="{StaticResource BrushTextSecondary}"
                                TextWrapping="Wrap"
